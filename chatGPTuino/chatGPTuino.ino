@@ -103,33 +103,32 @@ void loop(void) {
 
   /*********** GET USER INPUT ***********************************************/
   // If input and buffer not full, assign characters to buffer
-  // if (Serial.available() && state == GET_USER_INPUT) {
   if (keyboard.available() && state == GET_USER_INPUT) {
 
-    byte input = keyboard.read();
     bufferChange = true;
 
-    if (input == 'E') {
-      state = GET_REPONSE;
-    }
-    // TESTING -> If delete key entered, clear last char and adjust index
-    else if (input == 'D') {
+    unsigned int input = keyboard.read();
+    input &= 0xFF;  // Get lowest bits
 
-      inputBuffer[inputIndex] = ' ';
-      inputIndex = inputIndex > 0 ? inputIndex - 1 : 0;
-      // inputIndex--;
-      inputBufferFull = false;
-
-      Serial.print("DELETE-> ");
-      Serial.println(inputIndex);
-    }
-    // Add chars to inputBuffer if not full
-    else if (!inputBufferFull) {
-      inputBuffer[inputIndex] = input;
-      inputIndex++;
-
-      Serial.print("CREATE-> ");
-      Serial.println(inputIndex);
+    // Handle Special Keys and text
+    switch (input) {
+      case PS2_KEY_ENTER:
+        state = GET_REPONSE;
+        break;
+      case PS2_KEY_BS:  //Backspace Pressed
+        inputBuffer[inputIndex] = ' ';
+        inputIndex = inputIndex > 0 ? inputIndex - 1 : 0;
+        inputBufferFull = false;
+        break;
+      case PS2_KEY_SPACE:
+        inputBuffer[inputIndex] = ' ';
+        inputIndex++;
+        break;
+      default:
+        if (!inputBufferFull) {
+          inputBuffer[inputIndex] = input + 32; // Make input lower case
+          inputIndex++;
+        }
     }
 
     //If you have reached end of input buffer, display a #

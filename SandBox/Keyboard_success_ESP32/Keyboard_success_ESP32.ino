@@ -198,9 +198,33 @@ void loop() {
   if (keyboard.available()) {
     // read the next key
     c = keyboard.read();
+    c &= 0xFF; // Get lowest bits
+
+    
     if (c > 0) {
-      Serial.write(c);
+      Serial.write(c + 32);
       Serial.println("");
+
+    switch (c) {
+
+      case PS2_KEY_UP_ARROW:
+        Serial.println("PS2_KEY_UP_ARROW");
+        break;
+      case PS2_KEY_DN_ARROW:
+        Serial.println("PS2_KEY_DN_ARROW");
+        break;
+      case PS2_KEY_ENTER:
+        Serial.println("PS2_KEY_ENTER");
+        break;
+      case PS2_KEY_BS:
+        Serial.println("PS2_KEY_BS");
+        break;
+      case PS2_KEY_SPACE:
+        Serial.println("PS2_KEY_SPACE");
+        break;
+    }
+
+
     }
   }
 }
