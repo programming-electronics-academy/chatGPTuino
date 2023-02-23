@@ -129,33 +129,76 @@
 
 #include <PS2KeyAdvanced.h>
 
+/*  messages constants */
+/* Key codes and strings for keys producing a string */
+/* three arrays in same order ( keycode, string to display, length of string ) */
+#if defined(PS2_REQUIRES_PROGMEM)
+const uint8_t codes[] PROGMEM = { PS2_KEY_SPACE, PS2_KEY_TAB, PS2_KEY_ESC, PS2_KEY_DELETE,
+                                  PS2_KEY_F1, PS2_KEY_F2, PS2_KEY_F3, PS2_KEY_F4,
+                                  PS2_KEY_F5, PS2_KEY_F6, PS2_KEY_F7, PS2_KEY_F8,
+                                  PS2_KEY_F9, PS2_KEY_F10, PS2_KEY_F11, PS2_KEY_F12 };
+const char spacestr[] PROGMEM = " ";
+const char tabstr[] PROGMEM = "[Tab]";
+const char escstr[] PROGMEM = "[ESC]";
+const char delstr[] PROGMEM = "[Del]";
+const char f1str[] PROGMEM = "[F1]";
+const char f2str[] PROGMEM = "[F2]";
+const char f3str[] PROGMEM = "[F3]";
+const char f4str[] PROGMEM = "[F4]";
+const char f5str[] PROGMEM = "[F5]";
+const char f6str[] PROGMEM = "[F6]";
+const char f7str[] PROGMEM = "[F7]";
+const char f8str[] PROGMEM = "[F8]";
+const char f9str[] PROGMEM = "[F9]";
+const char f10str[] PROGMEM = "[F10]";
+const char f11str[] PROGMEM = "[F11]";
+const char f12str[] PROGMEM = "[F12]";
+
+// Due to AVR Harvard architecture array of string pointers to actual strings
+const char *const keys[] PROGMEM = {
+  spacestr, tabstr, escstr, delstr, f1str, f2str,
+  f3str, f4str, f5str, f6str, f7str, f8str,
+  f9str, f10str, f11str, f12str
+};
+const int8_t sizes[] PROGMEM = { 1, 5, 5, 5, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5 };
+char buffer[8];
+
+#else
+const uint8_t codes[] = { PS2_KEY_SPACE, PS2_KEY_TAB, PS2_KEY_ESC,
+                          PS2_KEY_DELETE, PS2_KEY_F1, PS2_KEY_F2, PS2_KEY_F3,
+                          PS2_KEY_F4, PS2_KEY_F5, PS2_KEY_F6, PS2_KEY_F7,
+                          PS2_KEY_F8, PS2_KEY_F9, PS2_KEY_F10, PS2_KEY_F11,
+                          PS2_KEY_F12 };
+const char *const keys[] = { " ", "[Tab]", "[ESC]", "[Del]", "[F1]", "[F2]", "[F3]",
+                             "[F4]", "[F5]", "[F6]", "[F7]", "[F8]",
+                             "[F9]", "[F10]", "[F11]", "[F12]" };
+const int8_t sizes[] = { 1, 5, 5, 5, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5 };
+#endif
 /* Keyboard constants  Change to suit your Arduino
    define pins used for data and clock from keyboard */
-#define DATAPIN 6 //7 Data -
-#define IRQPIN  5 //2 Data +
+#define DATAPIN 6  //7 Data -
+#define IRQPIN 5   //2 Data +
 
 uint16_t c;
 
 PS2KeyAdvanced keyboard;
 
 
-void setup( )
-{
+void setup() {
   // Configure the keyboard library
-  keyboard.begin( DATAPIN, IRQPIN );
-  Serial.begin( 115200 );
-  Serial.println( "PS2 Advanced Key Simple Test:" );
+  keyboard.begin(DATAPIN, IRQPIN);
+  keyboard.setNoBreak(1);   // No break codes for keys (when key released)
+  keyboard.setNoRepeat(1);  // Don't repeat shift ctrl etc
+  Serial.begin(115200);
+  Serial.println("PS2 Advanced Key Simple Test:");
 }
 
 
-void loop( )
-{
-  if ( keyboard.available( ) )
-  {
+void loop() {
+  if (keyboard.available()) {
     // read the next key
-    c = keyboard.read( );
-    if ( c > 0 )
-    {
+    c = keyboard.read();
+    if (c > 0) {
       Serial.write(c);
       Serial.println("");
     }

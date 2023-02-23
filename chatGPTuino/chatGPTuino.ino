@@ -8,8 +8,8 @@
 #include <PS2KeyAdvanced.h>
 
 // Pins for PS/2 keyboard (through USB)
-#define DATAPIN 6 // (USB Data -)  (PS2 pin 1)
-#define IRQPIN  5 // (USB Data +)  (PS2 pin 5)
+#define DATAPIN 6  // (USB Data -)  (PS2 pin 1)
+#define IRQPIN 5   // (USB Data +)  (PS2 pin 5)
 PS2KeyAdvanced keyboard;
 
 #ifdef U8X8_HAVE_HW_SPI
@@ -62,6 +62,10 @@ void setup(void) {
   Serial.println("ChatGPTuino");
   Serial.println("Setup Started...");
 
+  keyboard.begin(DATAPIN, IRQPIN);
+  keyboard.setNoBreak(1);   // No break codes for keys (when key released)
+  keyboard.setNoRepeat(1);  // Don't repeat shift ctrl etc
+
   WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED) {
@@ -99,9 +103,10 @@ void loop(void) {
 
   /*********** GET USER INPUT ***********************************************/
   // If input and buffer not full, assign characters to buffer
-  if (Serial.available() && state == GET_USER_INPUT) {
+  // if (Serial.available() && state == GET_USER_INPUT) {
+  if (keyboard.available() && state == GET_USER_INPUT) {
 
-    byte input = Serial.read();
+    byte input = keyboard.read();
     bufferChange = true;
 
     if (input == 'E') {
