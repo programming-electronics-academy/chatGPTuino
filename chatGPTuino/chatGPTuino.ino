@@ -41,7 +41,7 @@ const char* server = "api.openai.com";
 #define FONT_HEIGHT 13
 #define CHAT_DISPLAY_POS_START FONT_HEIGHT * 2
 #define INPUT_BUFFER_LENGTH 40
-#define MAX_CHAT_LINES 10
+#define MAX_CHAT_LINES 20
 
 const int MAX_CHAR_PER_LINE = SCREEN_WIDTH / FONT_WIDTH - 2;  //The minus 2 is a buffer for the right edge of the screen
 const int MAX_LINES = SCREEN_HEIGHT / FONT_HEIGHT;
@@ -55,6 +55,12 @@ unsigned int responseLength;
 // A buffer for response--<-----One line------>
 // const char* chatBuffer = ">                   <                                                                                                                                                                                                                  ";  // This is absurd....
 // String testBuffer = "";
+
+
+// OLED Display
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* clock=*/SCL, /* data=*/SDA, /* reset=*/U8X8_PIN_NONE);  // High speed I2C
+
+/* Get Length of Next Word*/
 int lengthOfToken(int startIndex, int stopIndex, char charArray[]) {
   for (int i = 0; i < stopIndex - startIndex; i++) {
     if (charArray[i + startIndex] == ' ') {
@@ -64,9 +70,23 @@ int lengthOfToken(int startIndex, int stopIndex, char charArray[]) {
   return -1;
 }
 
+/* Print the user input to screen */
+void printUserInput(int index)
+{
+    u8g2.clearBuffer();
+    u8g2.setCursor(0, FONT_HEIGHT);
+    byte start = (index > MAX_CHAR_PER_LINE) ? index - MAX_CHAR_PER_LINE : 0;
 
-// OLED Display
-U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* clock=*/SCL, /* data=*/SDA, /* reset=*/U8X8_PIN_NONE);  // High speed I2C
+    // Draw input buffer
+    for (int i = start; i < MAX_CHAR_PER_LINE + start; i++) {
+      u8g2.print(inputBuffer[i]);  // write something to the internal memory
+    }
+    u8g2.sendBuffer();
+}
+
+
+
+
 
 void setup(void) {
 
@@ -252,26 +272,28 @@ void loop(void) {
 
   //Only change display for new input
   if (bufferChange && state == GET_USER_INPUT) {
-
+    printUserInput(inputIndex);
     //************ Print User Input ***********************************
-    u8g2.clearBuffer();
-    u8g2.setCursor(0, FONT_HEIGHT);
-    byte start = (inputIndex > MAX_CHAR_PER_LINE) ? inputIndex - MAX_CHAR_PER_LINE : 0;
+    // u8g2.clearBuffer();
+    // u8g2.setCursor(0, FONT_HEIGHT);
+    // byte start = (inputIndex > MAX_CHAR_PER_LINE) ? inputIndex - MAX_CHAR_PER_LINE : 0;
 
-    // Draw input buffer
-    for (int i = start; i < MAX_CHAR_PER_LINE + start; i++) {
-      u8g2.print(inputBuffer[i]);  // write something to the internal memory
-    }
-    u8g2.sendBuffer();
+    // // Draw input buffer
+    // for (int i = start; i < MAX_CHAR_PER_LINE + start; i++) {
+    //   u8g2.print(inputBuffer[i]);  // write something to the internal memory
+    // }
+    // u8g2.sendBuffer();
   }
 
   if (printResponse) {
 
     //Print Response one word at a time
     byte linesInResponse = responseLength / MAX_CHAR_PER_LINE;
-    byte currentLine = 0;
+    byte currentLine = 1;
     byte displayLineNum = 2;
+    int lineStartIndexes[MAX_CHAT_LINES] = {0};
     u8g2.setCursor(0, FONT_HEIGHT * displayLineNum);
+
 
 
     int chatIndex = 0;
@@ -286,23 +308,12 @@ void loop(void) {
       //Get length of next token
       byte lenOfNextToken = lengthOfToken(chatIndex, responseLength, chatBuffer);
 
-      Serial.print("lenOfNextToken -> ");
-      Serial.println(lenOfNextToken);
-
-      Serial.print(" MAX_CHAR_PER_LINE * (lineNum - 1) -> ");
-      Serial.println(MAX_CHAR_PER_LINE * (displayLineNum - 1));
-
-      Serial.print("chatIndex -> ");
-      Serial.println(chatIndex);
-
-      //If next word extends beyond current line, go to next line
-      // if (lenOfNextToken + chatIndex >= (MAX_CHAR_PER_LINE - 2) * (lineNum - 1)) {
-      if (lenOfNextToken + chatIndex >= MAX_CHAR_PER_LINE * (displayLineNum - 1)) {
-
+      //  if (lenOfNextToken + chatIndex >= MAX_CHAR_PER_LINE * (displayLineNum - 1)) {
+       if (lenOfNextToken + chatIndex >= MAX_CHAR_PER_LINE * currentLine) {
+        lineStartIndexes[currentLine] = chatIndex;
         displayLineNum++;
         currentLine++;
         u8g2.setCursor(0, FONT_HEIGHT * displayLineNum);
-        Serial.print("New Line!");
       }
 
       for (int i = chatIndex; i < chatIndex + lenOfNextToken + 1; i++) {
@@ -311,13 +322,14 @@ void loop(void) {
       chatIndex += lenOfNextToken + 1;
       u8g2.sendBuffer();
 
-      long delayTime = 0;
+      delay(500);
 
-      if (currentLine < 3) {
-        delayTime = 200;
+      if (displayLineNum == 4) {
+        displayLineNum = 2;
+        u8g2.clearBuffer();
+        printUserInput(inputIndex);
+        u8g2.setCursor(0, FONT_HEIGHT * displayLineNum);
       } 
-
-      delay(delayTime);
     }
 
     printResponse = false;
