@@ -42,10 +42,34 @@ const char* server = "api.openai.com";
 #define INPUT_BUFFER_LENGTH 40
 #define MAX_CHAT_LINES 20
 
+// These reference may be useful for understanding tokens and message size
+// https://platform.openai.com/docs/api-reference/chat/create#chat/create-max_tokens
+// https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them
+// https://platform.openai.com/docs/guides/chat/introduction
+
+#define MAX_TOKENS 20
+#define CHARS_PER_TOKEN 5  // Each token equates to roughly 4 chars, but to be conservative, lets add a small buffer
+#define MAX_MESSAGE_LENGTH (MAX_TOKENS * CHARS_PER_TOKEN)
+#define MAX_MESSAGES 20  // Everytime you send a message, it must inlcude all previous messages in order to respond with context
+
+enum roles { sys,  //system
+             user,
+             assistant };
+
+// This is a HUGE chunk o' memory we need to allocate for all time
+struct message {
+  enum roles role;
+  char content[MAX_MESSAGE_LENGTH];
+} messages[MAX_MESSAGES];
+
+
 const int MAX_CHAR_PER_LINE = SCREEN_WIDTH / FONT_WIDTH - 2;  //The minus 2 is a buffer for the right edge of the screen
 const int MAX_LINES = SCREEN_HEIGHT / FONT_HEIGHT;
 const int CHAT_BUFFER_LENGTH = MAX_CHAR_PER_LINE * MAX_CHAT_LINES;
-const int MAX_TOKENS = CHAT_BUFFER_LENGTH / 5;  //https://platform.openai.com/tokenizer
+//const int MAX_TOKENS = CHAT_BUFFER_LENGTH / 5;  //https://platform.openai.com/tokenizer
+
+
+
 
 
 /*************************************************************************/
@@ -94,17 +118,28 @@ int lengthOfToken(int startIndex, int stopIndex, char charArray[]) {
  *
  *  index: index to start at
  */
-void printUserInput(int index) {
+// void printUserInput(int index) {
+void printUserInput(int mIdx, int cIdx) {
+
+  Serial.println("Print User Input Start");
+  Serial.print("mIdx -> ");
+  Serial.print(mIdx);
+  Serial.print("  |  cIdx -> ");
+  Serial.print(cIdx);
 
   u8g2.clearBuffer();
   u8g2.setCursor(0, FONT_HEIGHT);
-  byte start = (index > MAX_CHAR_PER_LINE) ? index - MAX_CHAR_PER_LINE : 0;
+  // byte start = (index > MAX_CHAR_PER_LINE) ? index - MAX_CHAR_PER_LINE : 0;
+  int start = (cIdx > MAX_CHAR_PER_LINE) ? cIdx - MAX_CHAR_PER_LINE : 0;
 
   // Draw input buffer
   for (int i = start; i < MAX_CHAR_PER_LINE + start; i++) {
-    u8g2.print(inputBuffer[i]);
+    //u8g2.print(inputBuffer[i]);
+    u8g2.print(messages[mIdx].content[i]);
   }
+
   u8g2.sendBuffer();
+  Serial.println("Print User Input End");
 }
 
 /*
@@ -185,13 +220,14 @@ void loop(void) {
   // static String testBuffer;
   static DynamicJsonDocument doc(1024);
 
-  //Track state
+  // Track state
   static byte state = GET_USER_INPUT;
+
+  // Track messageIndex
+  static byte messageIndex = 0;
 
   //Track input buffer index
   static byte inputIndex = 0;
-
-
   static boolean inputBufferFull = false;
   static boolean clearInput = false;
   boolean bufferChange = false;
@@ -210,51 +246,41 @@ void loop(void) {
     // Handle Special Keys and text
     switch (input) {
       case PS2_KEY_ENTER:
+
+        messageIndex++;
         state = GET_REPONSE;
         clearInput = true;
-
-        //Clear chat Buffer
-        for (int i = 0; i < CHAT_BUFFER_LENGTH; i++) {
-          chatBuffer[i] = ' ';
-        }
-
         Serial.println("Enter Key Pressed");
         break;
+
       case PS2_KEY_BS:  //Backspace Pressed
         inputIndex = inputIndex > 0 ? inputIndex - 1 : 0;
-        inputBuffer[inputIndex] = ' ';
+        messages[messageIndex].content[inputIndex] = ' ';
         inputBufferFull = false;
         break;
+
       case PS2_KEY_SPACE:
-        inputBuffer[inputIndex] = ' ';
-        inputIndex++;
+        if (!inputBufferFull) {
+          messages[messageIndex].content[inputIndex] = ' ';
+          inputIndex++;
+        }
         break;
       default:
 
-        //Clear input when asking next question
-        if (clearInput && state == GET_USER_INPUT) {
-          for (int i = 0; i < INPUT_BUFFER_LENGTH; i++) {
-            inputBuffer[i] = ' ';
-          }
-          Serial.println("Clear Input");
-          inputIndex = 0;  // Return index to start
-          clearInput = false;
-          inputBufferFull = false;
-        }
-
+        // Add character to current message
         if (!inputBufferFull) {
-          // inputBuffer[inputIndex] = char(input + 32);  // Make input lower case
-          inputBuffer[inputIndex] = char(input);  // Make input lower case
+          messages[messageIndex].content[inputIndex] = char(input);
           inputIndex++;
         }
     }
 
-    //If you have reached end of input buffer, display a #
-    if (inputIndex >= INPUT_BUFFER_LENGTH && !inputBufferFull) {
+    //If you have reached end of input buffer, display a <
+    if (inputIndex >= MAX_MESSAGE_LENGTH && !inputBufferFull) {
       bufferChange = true;
       inputBufferFull = true;
 
-      inputBuffer[INPUT_BUFFER_LENGTH - 1] = '<';
+      messages[messageIndex].content[MAX_MESSAGE_LENGTH - 1] = '<';
+      // inputBuffer[INPUT_BUFFER_LENGTH - 1] = '<';
     }
   }
 
@@ -281,7 +307,7 @@ void loop(void) {
           // start connection and send HTTP header
           String temp_input = String(inputBuffer);
 
-          
+
           StaticJsonDocument<192> doc;
 
           doc["model"] = "text-davinci-003";
@@ -345,7 +371,7 @@ void loop(void) {
 
   /*********** Print User Input - Only change display for new input *************************************/
   if (bufferChange && state == GET_USER_INPUT) {
-    printUserInput(inputIndex);
+    printUserInput(messageIndex, inputIndex);
   }
 
   /*********** Print Response one word at a time *************************************/
@@ -389,7 +415,7 @@ void loop(void) {
       if (displayLineNum == 4) {
         displayLineNum = 2;
         u8g2.clearBuffer();
-        printUserInput(inputIndex);
+        printUserInput(messageIndex, inputIndex);
         u8g2.setCursor(0, FONT_HEIGHT * displayLineNum);
       }
     }
