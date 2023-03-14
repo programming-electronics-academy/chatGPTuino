@@ -230,7 +230,6 @@ void loop(void) {
         inputIndex++;
         break;
       default:
-
         //Clear input when asking next question
         if (clearInput && state == GET_USER_INPUT) {
           for (int i = 0; i < INPUT_BUFFER_LENGTH; i++) {

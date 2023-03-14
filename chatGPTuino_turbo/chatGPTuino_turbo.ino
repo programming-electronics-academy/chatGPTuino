@@ -20,8 +20,10 @@ PS2KeyAdvanced keyboard;
 #endif
 
 // Open AI endpoint
-const char* openAPIendPoint = "https://api.openai.com/v1/completions";
+const char* openAPIendPoint = "https://api.openai.com/v1/chat/completions";
 const char* server = "api.openai.com";
+
+const int port = 443;
 
 // Blinking Interval
 #define CURSOR_BLINK_INTERVAL 250
@@ -40,36 +42,39 @@ const char* server = "api.openai.com";
 #define FONT_HEIGHT 13
 #define CHAT_DISPLAY_POS_START FONT_HEIGHT * 2
 #define INPUT_BUFFER_LENGTH 40
-#define MAX_CHAT_LINES 20
+#define MAX_CHAT_LINES 60  // This needs better estimated
 
 // These reference may be useful for understanding tokens and message size
 // https://platform.openai.com/docs/api-reference/chat/create#chat/create-max_tokens
 // https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them
 // https://platform.openai.com/docs/guides/chat/introduction
 
-#define MAX_TOKENS 20
-#define CHARS_PER_TOKEN 5  // Each token equates to roughly 4 chars, but to be conservative, lets add a small buffer
+#define MAX_TOKENS 150
+#define CHARS_PER_TOKEN 6  // Each token equates to roughly 4 chars, but does not include spaces
 #define MAX_MESSAGE_LENGTH (MAX_TOKENS * CHARS_PER_TOKEN)
-#define MAX_MESSAGES 20  // Everytime you send a message, it must inlcude all previous messages in order to respond with context
+#define MAX_MESSAGES 5  // Everytime you send a message, it must inlcude all previous messages in order to respond with context
 
+// typedef enum { sys,  //system
+//              user,
+//              assistant } roles;
 enum roles { sys,  //system
              user,
              assistant };
 
+
+char roleNames[3][10] = { "system", "user", "assistant" };
+
 // This is a HUGE chunk o' memory we need to allocate for all time
 struct message {
   enum roles role;
+  // roles role;
   char content[MAX_MESSAGE_LENGTH];
-} messages[MAX_MESSAGES];
-
+} messages[MAX_MESSAGES] = { { user, "Please respond briefly to all my questions." } };
 
 const int MAX_CHAR_PER_LINE = SCREEN_WIDTH / FONT_WIDTH - 2;  //The minus 2 is a buffer for the right edge of the screen
 const int MAX_LINES = SCREEN_HEIGHT / FONT_HEIGHT;
 const int CHAT_BUFFER_LENGTH = MAX_CHAR_PER_LINE * MAX_CHAT_LINES;
 //const int MAX_TOKENS = CHAT_BUFFER_LENGTH / 5;  //https://platform.openai.com/tokenizer
-
-
-
 
 
 /*************************************************************************/
@@ -121,25 +126,16 @@ int lengthOfToken(int startIndex, int stopIndex, char charArray[]) {
 // void printUserInput(int index) {
 void printUserInput(int mIdx, int cIdx) {
 
-  Serial.println("Print User Input Start");
-  Serial.print("mIdx -> ");
-  Serial.print(mIdx);
-  Serial.print("  |  cIdx -> ");
-  Serial.print(cIdx);
-
   u8g2.clearBuffer();
   u8g2.setCursor(0, FONT_HEIGHT);
-  // byte start = (index > MAX_CHAR_PER_LINE) ? index - MAX_CHAR_PER_LINE : 0;
   int start = (cIdx > MAX_CHAR_PER_LINE) ? cIdx - MAX_CHAR_PER_LINE : 0;
 
   // Draw input buffer
   for (int i = start; i < MAX_CHAR_PER_LINE + start; i++) {
-    //u8g2.print(inputBuffer[i]);
     u8g2.print(messages[mIdx].content[i]);
   }
 
   u8g2.sendBuffer();
-  Serial.println("Print User Input End");
 }
 
 /*
@@ -183,6 +179,8 @@ DeserializationError extractResponse(String jsonPayload) {
 
 void setup(void) {
 
+
+
   Serial.begin(9600);
   delay(1000);
   Serial.println("ChatGPTuino");
@@ -200,6 +198,8 @@ void setup(void) {
     delay(500);
     Serial.print(".");
   }
+
+  //client.setCACert(rootCACertificate);  //Only communicate with the server if the CA certificates match
 
   Serial.print("WiFi connected to IP address: ");
   Serial.println(WiFi.localIP());
@@ -224,7 +224,8 @@ void loop(void) {
   static byte state = GET_USER_INPUT;
 
   // Track messageIndex
-  static byte messageIndex = 0;
+  static byte messageIndex = 1;  //offset from default
+  static byte messageEndIndex = 1;  //offset from default
 
   //Track input buffer index
   static byte inputIndex = 0;
@@ -233,6 +234,16 @@ void loop(void) {
   boolean bufferChange = false;
   static boolean printResponse = false;
 
+
+  // Serial.println("Print contents of messages");
+  // for(int i = 0; i < messageIndex; i++)
+  // {
+  //   Serial.print(i);
+  //   Serial.print(" - ");
+  //   Serial.print(messages[i].role);
+  //   Serial.print(" - ");
+  //   Serial.println(messages[i].content);
+  // }
 
   /*********** GET USER INPUT ***********************************************/
   // If input and buffer not full, assign characters to buffer
@@ -246,8 +257,11 @@ void loop(void) {
     // Handle Special Keys and text
     switch (input) {
       case PS2_KEY_ENTER:
+        // messages[messageIndex].role = user;
+        // messageIndex++;
 
-        messageIndex++;
+        messages[messageIndex++].role = user;
+        messageIndex %= MAX_MESSAGES;
         state = GET_REPONSE;
         clearInput = true;
         Serial.println("Enter Key Pressed");
@@ -267,8 +281,15 @@ void loop(void) {
         break;
       default:
 
+        if (clearInput) {
+          inputIndex = 0;  // Return index to start
+          clearInput = false;
+          inputBufferFull = false;
+        }
+
         // Add character to current message
         if (!inputBufferFull) {
+
           messages[messageIndex].content[inputIndex] = char(input);
           inputIndex++;
         }
@@ -280,93 +301,99 @@ void loop(void) {
       inputBufferFull = true;
 
       messages[messageIndex].content[MAX_MESSAGE_LENGTH - 1] = '<';
-      // inputBuffer[INPUT_BUFFER_LENGTH - 1] = '<';
     }
   }
 
   /*********** GET RESPONSE ***********************************************/
   if (state == GET_REPONSE) {
 
-    Serial.println("Start GET RESPONSE...");
+    Serial.println("----------------------Start GET RESPONSE---------------");
 
-    WiFiClientSecure* client = new WiFiClientSecure;
+    WiFiClientSecure client;
+    client.setCACert(rootCACertificate);
 
-    if (client) {
-      client->setCACert(rootCACertificate);
-      {
-        // Add a scoping block for HTTPClient https to make sure it is destroyed before WiFiClientSecure *client is
-        HTTPClient https;
-        https.addHeader("Content-Type", "application/json");
-        https.addHeader("Authorization", openAI_Private_key);
+    DynamicJsonDocument doc(12288);
+    doc["model"] = "gpt-3.5-turbo";
+    doc["max_tokens"] = MAX_TOKENS;
 
-        Serial.print("[HTTPS] begin...\n");
-        if (https.begin(*client, openAPIendPoint)) {  // HTTPS
+    JsonArray messagesJSON = doc.createNestedArray("messages");
 
-          Serial.print("[HTTPS] POST...\n");
+    for (int i = 0; i < messageIndex; i++) {
+      messagesJSON[i]["role"] = roleNames[messages[i].role];
+      messagesJSON[i]["content"] = messages[i].content;
+    }
 
-          // start connection and send HTTP header
-          String temp_input = String(inputBuffer);
+    Serial.println("--------------------JSON SENT------------------------");
+    serializeJson(doc, Serial);
+
+    int conn = client.connect(server, port);
+
+    if (conn == 1) {
+      Serial.println();
+      Serial.println("Sending Parameters...");
+      //Request
+      client.println("POST https://api.openai.com/v1/chat/completions HTTP/1.1");
+      //Headers
+      client.print("Host: ");
+      client.println(server);
+      client.println("Content-Type: application/json");
+      client.print("Content-Length: ");
+      client.println(measureJson(doc));
+      client.print("Authorization: ");
+      client.println(openAI_Private_key);
+      client.println("Connection: Close");
+      client.println();
+      //Body
+      serializeJson(doc, client);
+      client.println();
+
+      //Wait for server response
+      while (client.available() == 0)
+        ;
+
+      // Stream& input;
+      client.find("\r\n\r\n");
+
+      // Filter returning JSON
+      StaticJsonDocument<500> filter;
+      JsonObject filter_choices_0_message = filter["choices"][0].createNestedObject("message");
+      filter_choices_0_message["role"] = true;
+      filter_choices_0_message["content"] = true;
+
+      StaticJsonDocument<2000> outputDoc;
+      DeserializationError error = deserializeJson(outputDoc, client, DeserializationOption::Filter(filter));
+
+      client.stop();
+
+      if (error) {
+        Serial.print("deserializeJson() failed: ");
+        Serial.println(error.c_str());
+        return;
+      }
+
+      messages[messageIndex].role = assistant;                                                                                 // "assistant"
+      strncpy(messages[messageIndex].content, outputDoc["choices"][0]["message"]["content"] | "No Data", MAX_MESSAGE_LENGTH);  // "\n\nArduino is a ...
+
+      responseLength = measureJson(outputDoc["choices"][0]["message"]["content"]);
 
 
-          StaticJsonDocument<192> doc;
+      Serial.println("-------------------JSON Receive-----------------------");
+      Serial.print("size of reponse -> ");
+      Serial.println(responseLength);
+      Serial.println(roleNames[messages[messageIndex].role]);
+      Serial.println(messages[messageIndex].content);
 
-          doc["model"] = "text-davinci-003";
-          doc["prompt"] = "Say this is a test";
-          doc["temperature"] = 0;
-          doc["max_tokens"] = 7;
+      messageIndex++;
+      messageIndex %= MAX_MESSAGES
 
-          unsigned char inputJSON[400] = {};
-          serializeJsonPretty(doc, inputJSON);
-          Serial.print("what inputJSON char * looks like ->");
-          // Serial.println(inputJSON);
-
-          Serial.println("What the JSON");
-          serializeJsonPretty(doc, Serial);
-          Serial.println("");
-
-          //char * testChars = "{\"model\":\"text-davinci-003\",\"prompt\":\"what is arduino\",\"max_tokens\":76}";
-          int httpCode = https.POST(String("{\"model\":\"text-davinci-003\",\"prompt\":\"" + temp_input + "\",\"max_tokens\":" + MAX_TOKENS + "}"));
-          // int httpCode = https.POST(String("{\"model\":\"gpt-3.5-turbo\",\"messages\":[\"{\"role\":\"user\",\"content\":\"Hello!\"}\"]}"));
-          //int httpCode = https.POST((uint8_t*)inputJSON, 400);
-          //int httpCode = https.POST((uint8_t*)testChars, 400);
-
-          // httpCode will be negative on error
-          if (httpCode > 0) {
-            // HTTP header has been send and Server response header has been handled
-            Serial.printf("[HTTPS] GET... code: %d\n", httpCode);
-
-            // file found at server
-            if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
-              String payload = https.getString();
-
-              //Print Raw JSON
-              Serial.println(payload);
-              DeserializationError err = extractResponse(payload);
-
-              if (err) {
-                Serial.print(F("deserializeJson() failed with code "));
-                Serial.println(err.f_str());
-              }
-            }
-          } else {
-            Serial.printf("[HTTPS] GET... failed, error: %s\n", https.errorToString(httpCode).c_str());
-          }
-
-          https.end();
-        } else {
-          Serial.printf("[HTTPS] Unable to connect\n");
-        }
-
-      }  // End extra scoping block
-
-      delete client;
     } else {
-      Serial.println("Unable to create client");
+      client.stop();
+      Serial.println("Connection Failed");
     }
 
     state = GET_USER_INPUT;
     printResponse = true;
-    Serial.println("...End GET RESPONSE");
+    Serial.println("<-------------------- END Get Reponse ----------------->");
   }
 
   /*********** Print User Input - Only change display for new input *************************************/
@@ -377,7 +404,8 @@ void loop(void) {
   /*********** Print Response one word at a time *************************************/
   if (printResponse) {
 
-    //Print Response
+    Serial.println("---------------- printResponse Start----------------");
+
     int chatIndex = 0;
     byte currentLine = 1;
     byte displayLineNum = 2;
@@ -385,18 +413,18 @@ void loop(void) {
 
     u8g2.setCursor(0, FONT_HEIGHT * displayLineNum);
 
-
-    //adjust chat index for newlines at beginnning of response
-    while (chatBuffer[chatIndex] == '\n') {
+    // Remove beginning newlines
+    while (messages[messageIndex - 1].content[chatIndex] == '\n') {
       chatIndex++;
+
+      Serial.println("-Remove newlines");
     }
 
     while (chatIndex < responseLength) {
 
       //Get length of next token
-      byte lenOfNextToken = lengthOfToken(chatIndex, responseLength, chatBuffer);
+      byte lenOfNextToken = lengthOfToken(chatIndex, responseLength, messages[messageIndex - 1].content);
 
-      //  if (lenOfNextToken + chatIndex >= MAX_CHAR_PER_LINE * (displayLineNum - 1)) {
       if (lenOfNextToken + chatIndex >= MAX_CHAR_PER_LINE * currentLine) {
         lineStartIndexes[currentLine] = chatIndex;
         displayLineNum++;
@@ -405,12 +433,13 @@ void loop(void) {
       }
 
       for (int i = chatIndex; i < chatIndex + lenOfNextToken + 1; i++) {
-        u8g2.print(chatBuffer[i]);  // write something to the internal memory
+        // u8g2.print(chatBuffer[i]);  // write something to the internal memory
+        u8g2.print(messages[messageIndex - 1].content[i]);  // write something to the internal memory
       }
       chatIndex += lenOfNextToken + 1;
       u8g2.sendBuffer();
 
-      delay(500);
+      delay(100);
 
       if (displayLineNum == 4) {
         displayLineNum = 2;
@@ -421,5 +450,6 @@ void loop(void) {
     }
 
     printResponse = false;
+    Serial.println("---------------- printResponse Stop ----------------");
   }
 }
