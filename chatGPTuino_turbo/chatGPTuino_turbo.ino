@@ -257,11 +257,11 @@ void loop(void) {
     // Handle Special Keys and text
     switch (input) {
       case PS2_KEY_ENTER:
-        // messages[messageIndex].role = user;
-        // messageIndex++;
+        messages[messageIndex].role = user;
+        messageIndex++;
 
-        messages[messageIndex++].role = user;
-        messageIndex %= MAX_MESSAGES;
+        // messages[messageIndex++].role = user;
+        // messageIndex %= MAX_MESSAGES;
         state = GET_REPONSE;
         clearInput = true;
         Serial.println("Enter Key Pressed");
@@ -384,7 +384,7 @@ void loop(void) {
       Serial.println(messages[messageIndex].content);
 
       messageIndex++;
-      messageIndex %= MAX_MESSAGES
+      // messageIndex %= MAX_MESSAGES;
 
     } else {
       client.stop();
