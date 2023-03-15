@@ -52,7 +52,7 @@ const int port = 443;
 #define MAX_TOKENS 150
 #define CHARS_PER_TOKEN 6  // Each token equates to roughly 4 chars, but does not include spaces
 #define MAX_MESSAGE_LENGTH (MAX_TOKENS * CHARS_PER_TOKEN)
-#define MAX_MESSAGES 5  // Everytime you send a message, it must inlcude all previous messages in order to respond with context
+#define MAX_MESSAGES 3  // Everytime you send a message, it must inlcude all previous messages in order to respond with context
 
 // typedef enum { sys,  //system
 //              user,
@@ -69,7 +69,7 @@ struct message {
   enum roles role;
   // roles role;
   char content[MAX_MESSAGE_LENGTH];
-} messages[MAX_MESSAGES] = { { user, "Please respond briefly to all my questions." } };
+} messages[MAX_MESSAGES];
 
 const int MAX_CHAR_PER_LINE = SCREEN_WIDTH / FONT_WIDTH - 2;  //The minus 2 is a buffer for the right edge of the screen
 const int MAX_LINES = SCREEN_HEIGHT / FONT_HEIGHT;
@@ -147,30 +147,30 @@ void printUserInput(int mIdx, int cIdx) {
  *
  *  returns: 
  */
-DeserializationError extractResponse(String jsonPayload) {
+// DeserializationError extractResponse(String jsonPayload) {
 
-  // Store and deserialize JSON
-  DynamicJsonDocument document(1024);
-  DeserializationError err = deserializeJson(document, jsonPayload);
+//   // Store and deserialize JSON
+//   DynamicJsonDocument document(1024);
+//   DeserializationError err = deserializeJson(document, jsonPayload);
 
-  // Save response to buffer
-  JsonObject choices_0 = document["choices"][0];
-  String tempBuffer = choices_0["text"];  // Response
-  tempBuffer.toCharArray(chatBuffer, CHAT_BUFFER_LENGTH);
+//   // Save response to buffer
+//   JsonObject choices_0 = document["choices"][0];
+//   String tempBuffer = choices_0["text"];  // Response
+//   tempBuffer.toCharArray(chatBuffer, CHAT_BUFFER_LENGTH);
 
-  // Record repsonse length
-  responseLength = tempBuffer.length();
+//   // Record repsonse length
+//   responseLength = tempBuffer.length();
 
-  // print RAW JSON
-  Serial.print("responseLength ->");
-  Serial.println(responseLength);
+//   // print RAW JSON
+//   Serial.print("responseLength ->");
+//   Serial.println(responseLength);
 
-  // print RAW JSON
-  Serial.print("chatBufferArray[] -> ");
-  Serial.println(chatBuffer);
+//   // print RAW JSON
+//   Serial.print("chatBufferArray[] -> ");
+//   Serial.println(chatBuffer);
 
-  return err;
-}
+//   return err;
+// }
 
 
 /*************************************************************************/
@@ -178,8 +178,6 @@ DeserializationError extractResponse(String jsonPayload) {
 /*************************************************************************/
 
 void setup(void) {
-
-
 
   Serial.begin(9600);
   delay(1000);
@@ -224,8 +222,9 @@ void loop(void) {
   static byte state = GET_USER_INPUT;
 
   // Track messageIndex
-  static byte messageIndex = 1;  //offset from default
-  static byte messageEndIndex = 1;  //offset from default
+  static byte messageIndex = 0;     //offset from default
+  static byte messageEndIndex = 0;  //offset from default
+  static byte numMessages = 0;
 
   //Track input buffer index
   static byte inputIndex = 0;
@@ -233,17 +232,6 @@ void loop(void) {
   static boolean clearInput = false;
   boolean bufferChange = false;
   static boolean printResponse = false;
-
-
-  // Serial.println("Print contents of messages");
-  // for(int i = 0; i < messageIndex; i++)
-  // {
-  //   Serial.print(i);
-  //   Serial.print(" - ");
-  //   Serial.print(messages[i].role);
-  //   Serial.print(" - ");
-  //   Serial.println(messages[i].content);
-  // }
 
   /*********** GET USER INPUT ***********************************************/
   // If input and buffer not full, assign characters to buffer
@@ -257,11 +245,11 @@ void loop(void) {
     // Handle Special Keys and text
     switch (input) {
       case PS2_KEY_ENTER:
-        messages[messageIndex].role = user;
-        messageIndex++;
 
-        // messages[messageIndex++].role = user;
-        // messageIndex %= MAX_MESSAGES;
+        messages[messageEndIndex++].role = user;
+        messageEndIndex %= MAX_MESSAGES;
+        numMessages++;
+
         state = GET_REPONSE;
         clearInput = true;
         Serial.println("Enter Key Pressed");
@@ -269,28 +257,42 @@ void loop(void) {
 
       case PS2_KEY_BS:  //Backspace Pressed
         inputIndex = inputIndex > 0 ? inputIndex - 1 : 0;
-        messages[messageIndex].content[inputIndex] = ' ';
+        messages[messageEndIndex].content[inputIndex] = ' ';
         inputBufferFull = false;
         break;
 
       case PS2_KEY_SPACE:
         if (!inputBufferFull) {
-          messages[messageIndex].content[inputIndex] = ' ';
+          messages[messageEndIndex].content[inputIndex] = ' ';
           inputIndex++;
         }
         break;
       default:
 
         if (clearInput) {
+
+          Serial.print("Content of ");
+          Serial.print(messageEndIndex);
+          Serial.print(" BEFORE clearing:");
+          Serial.println(messages[messageEndIndex].content);
+
+          for (int i = 0; i < MAX_MESSAGE_LENGTH; i++) {
+            messages[messageEndIndex].content[i] = ' ';
+          }
           inputIndex = 0;  // Return index to start
           clearInput = false;
           inputBufferFull = false;
+
+          Serial.print("Content of ");
+          Serial.print(messageEndIndex);
+          Serial.print(" AFTER clearing:");
+          Serial.println(messages[messageEndIndex].content);
         }
 
         // Add character to current message
         if (!inputBufferFull) {
 
-          messages[messageIndex].content[inputIndex] = char(input);
+          messages[messageEndIndex].content[inputIndex] = char(input);
           inputIndex++;
         }
     }
@@ -300,7 +302,7 @@ void loop(void) {
       bufferChange = true;
       inputBufferFull = true;
 
-      messages[messageIndex].content[MAX_MESSAGE_LENGTH - 1] = '<';
+      messages[messageEndIndex].content[MAX_MESSAGE_LENGTH - 1] = '<';
     }
   }
 
@@ -318,12 +320,32 @@ void loop(void) {
 
     JsonArray messagesJSON = doc.createNestedArray("messages");
 
-    for (int i = 0; i < messageIndex; i++) {
-      messagesJSON[i]["role"] = roleNames[messages[i].role];
-      messagesJSON[i]["content"] = messages[i].content;
+
+    int indexStart = 0;
+
+    if (numMessages >= MAX_MESSAGES) {
+      indexStart = numMessages % MAX_MESSAGES;
+    }
+
+    // for (int i = messageIndex; i < messageEndIndex; i++) {
+    for (int i = 0; i < numMessages && i < MAX_MESSAGES; i++) {
+      messagesJSON[i]["role"] = roleNames[messages[indexStart].role];
+      messagesJSON[i]["content"] = messages[indexStart].content;
+      Serial.print("indexStart before increment -> ");
+      Serial.println(indexStart);
+      indexStart++;
+      Serial.print("indexStart after increment -> ");
+      Serial.println(indexStart);
+      if (indexStart >= MAX_MESSAGES) {
+        indexStart = 0;
+      }
+      // messageIndex %= MAX_MESSAGES;
+      Serial.print("indexStart after modulo -> ");
+      Serial.println(indexStart);
     }
 
     Serial.println("--------------------JSON SENT------------------------");
+    serializeJsonPretty(doc, Serial);
     serializeJson(doc, Serial);
 
     int conn = client.connect(server, port);
@@ -371,20 +393,31 @@ void loop(void) {
         return;
       }
 
-      messages[messageIndex].role = assistant;                                                                                 // "assistant"
-      strncpy(messages[messageIndex].content, outputDoc["choices"][0]["message"]["content"] | "No Data", MAX_MESSAGE_LENGTH);  // "\n\nArduino is a ...
+
+      messages[messageEndIndex].role = assistant;
+      for (int i = 0; i < MAX_MESSAGE_LENGTH; i++) {
+        messages[messageEndIndex].content[i] = ' ';
+      }
+      strncpy(messages[messageEndIndex].content, outputDoc["choices"][0]["message"]["content"] | "Say Again?", MAX_MESSAGE_LENGTH);  // "\n\nArduino is a ...
 
       responseLength = measureJson(outputDoc["choices"][0]["message"]["content"]);
 
 
-      Serial.println("-------------------JSON Receive-----------------------");
+      Serial.println("-------------------Message Buffer----------------------");
+
       Serial.print("size of reponse -> ");
       Serial.println(responseLength);
-      Serial.println(roleNames[messages[messageIndex].role]);
-      Serial.println(messages[messageIndex].content);
+      Serial.println(messages[messageEndIndex].content);
 
-      messageIndex++;
-      // messageIndex %= MAX_MESSAGES;
+      for (int i = 0; i < MAX_MESSAGES; i++) {
+        Serial.print(i);
+        Serial.print(" - ");
+        Serial.println(messages[i].content);
+      }
+
+      messageEndIndex++;
+      messageEndIndex %= MAX_MESSAGES;
+      numMessages++;
 
     } else {
       client.stop();
@@ -398,7 +431,7 @@ void loop(void) {
 
   /*********** Print User Input - Only change display for new input *************************************/
   if (bufferChange && state == GET_USER_INPUT) {
-    printUserInput(messageIndex, inputIndex);
+    printUserInput(messageEndIndex, inputIndex);
   }
 
   /*********** Print Response one word at a time *************************************/
@@ -414,7 +447,7 @@ void loop(void) {
     u8g2.setCursor(0, FONT_HEIGHT * displayLineNum);
 
     // Remove beginning newlines
-    while (messages[messageIndex - 1].content[chatIndex] == '\n') {
+    while (messages[messageEndIndex - 1].content[chatIndex] == '\n') {
       chatIndex++;
 
       Serial.println("-Remove newlines");
@@ -434,17 +467,17 @@ void loop(void) {
 
       for (int i = chatIndex; i < chatIndex + lenOfNextToken + 1; i++) {
         // u8g2.print(chatBuffer[i]);  // write something to the internal memory
-        u8g2.print(messages[messageIndex - 1].content[i]);  // write something to the internal memory
+        u8g2.print(messages[messageEndIndex - 1].content[i]);  // write something to the internal memory
       }
       chatIndex += lenOfNextToken + 1;
       u8g2.sendBuffer();
 
-      delay(100);
+      delay(250);
 
       if (displayLineNum == 4) {
         displayLineNum = 2;
         u8g2.clearBuffer();
-        printUserInput(messageIndex, inputIndex);
+        printUserInput(messageEndIndex, inputIndex);
         u8g2.setCursor(0, FONT_HEIGHT * displayLineNum);
       }
     }
