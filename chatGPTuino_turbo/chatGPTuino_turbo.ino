@@ -39,7 +39,7 @@ const int port = 443;
 #define SCREEN_HEIGHT 64
 #define SCREEN_WIDTH 128
 #define FONT_WIDTH 6
-#define FONT_HEIGHT 13
+#define FONT_HEIGHT 12
 #define CHAT_DISPLAY_POS_START FONT_HEIGHT * 2
 #define INPUT_BUFFER_LENGTH 40
 #define MAX_CHAT_LINES 60  // This needs better estimated
@@ -68,8 +68,8 @@ struct message {
   char content[MAX_MESSAGE_LENGTH];
 } messages[MAX_MESSAGES];
 
-const int MAX_CHAR_PER_LINE = SCREEN_WIDTH / FONT_WIDTH - 2;  //The minus 2 is a buffer for the right edge of the screen
-const int MAX_LINES = SCREEN_HEIGHT / FONT_HEIGHT;
+const int MAX_CHAR_PER_LINE = 20;  //SCREEN_WIDTH / FONT_WIDTH - 2;  //The minus 2 is a buffer for the right edge of the screen
+const int MAX_LINES = 5;           //SCREEN_HEIGHT / FONT_HEIGHT;
 const int CHAT_BUFFER_LENGTH = MAX_CHAR_PER_LINE * MAX_CHAT_LINES;
 //const int MAX_TOKENS = CHAT_BUFFER_LENGTH / 5;  //https://platform.openai.com/tokenizer
 
@@ -112,23 +112,31 @@ int lengthOfToken(int startIndex, int stopIndex, char charArray[]) {
   return -1;
 }
 
+
 /*
  * Function:  printUserInput 
  * -------------------------
  * Displays characters from inputBuffer to top line of OLED.
  * Clears buffer when starts.
  *
- *  index: index to start at
+ *  mIdx: The index of the message in the message array 
+ *  cIdx: The index of the messages content - the actual text
  */
-// void printUserInput(int index) {
 void printUserInput(int mIdx, int cIdx) {
 
   u8g2.clearBuffer();
-  u8g2.setCursor(0, FONT_HEIGHT);
-  int start = (cIdx > MAX_CHAR_PER_LINE) ? cIdx - MAX_CHAR_PER_LINE : 0;
 
-  // Draw input buffer
-  for (int i = start; i < MAX_CHAR_PER_LINE + start; i++) {
+  int lineNum = 0;
+  u8g2.setCursor(0, (FONT_HEIGHT * lineNum) - 2);
+  int start = (cIdx > MAX_CHAR_PER_LINE * MAX_LINES) ? cIdx - (MAX_CHAR_PER_LINE * MAX_LINES) : 0;
+
+  for (int i = start; i < cIdx; i++) {
+
+    if (i % MAX_CHAR_PER_LINE == 0) {
+      lineNum++;
+      u8g2.setCursor(0, FONT_HEIGHT * lineNum);
+    }
+
     u8g2.print(messages[mIdx].content[i]);
   }
 
@@ -318,16 +326,25 @@ void loop(void) {
       serializeJson(doc, client);
       client.println();
 
-      // Wait for server response
-      while (client.available() == 0) {
-        ;
-      }
 
-      // Read all the lines of the reply from server and print them to Serial
-      // while (client.available()) {
+
+      // Troubelshoot server reponse
+      /*
       String line = client.readStringUntil('X');
       Serial.print(line);
-      // }
+      */
+      bool oncer = false;
+      // Wait for server response
+      while (client.available() == 0) {
+
+        if (!oncer) {
+          u8g2.clearBuffer();
+          u8g2.setCursor(0, FONT_HEIGHT * 2);
+          u8g2.print("Thinking...");
+          u8g2.sendBuffer();
+          oncer = true;
+        }
+      }
 
       client.find("\r\n\r\n");
 
@@ -350,13 +367,12 @@ void loop(void) {
 
       messages[messageEndIndex].role = assistant;
       // Clear char array
-      messages[messageEndIndex].content[0] = '\0'; // Why does this work?
+      messages[messageEndIndex].content[0] = '\0';  // Why does this work?
       // memset(messages[messageEndIndex].content, 0, sizeof messages[messageEndIndex].content);
 
       strncpy(messages[messageEndIndex].content, outputDoc["choices"][0]["message"]["content"] | "...", MAX_MESSAGE_LENGTH);  // "\n\nArduino is a ...
 
       responseLength = measureJson(outputDoc["choices"][0]["message"]["content"]);
-
 
       Serial.println("-------------------Message Buffer----------------------");
 
@@ -398,54 +414,16 @@ void loop(void) {
   if (printResponse) {
 
     Serial.println("---------------- printResponse Start----------------");
-    Serial.print("messageEndIndex -> ");
-    Serial.println(messageEndIndex);
 
     // Roll over
     int responseIdx = messageEndIndex - 1 < 0 ? MAX_MESSAGES - 1 : messageEndIndex - 1;
-    Serial.print("responseIdx -> ");
-    Serial.println(responseIdx);
 
-    int chatIndex = 0;
-    byte currentLine = 1;
-    byte displayLineNum = 2;
-    int lineStartIndexes[MAX_CHAT_LINES] = { 0 };
+    for (int i = 0; i < responseLength; i++) {
 
-    u8g2.setCursor(0, FONT_HEIGHT * displayLineNum);
+      printUserInput(responseIdx, i);
 
-    // Remove beginning newlines
-    while (messages[responseIdx].content[chatIndex] == '\n') {
-      chatIndex++;
-
-      Serial.println("-Removing Newline from response");
-    }
-
-    while (chatIndex < responseLength) {
-
-      //Get length of next token
-      byte lenOfNextToken = lengthOfToken(chatIndex, responseLength, messages[responseIdx].content);
-
-      if (lenOfNextToken + chatIndex >= MAX_CHAR_PER_LINE * currentLine) {
-        lineStartIndexes[currentLine] = chatIndex;
-        displayLineNum++;
-        currentLine++;
-        u8g2.setCursor(0, FONT_HEIGHT * displayLineNum);
-      }
-
-      for (int i = chatIndex; i < chatIndex + lenOfNextToken + 1; i++) {
-
-        u8g2.print(messages[responseIdx].content[i]);
-      }
-      chatIndex += lenOfNextToken + 1;
-      u8g2.sendBuffer();
-
-      delay(400);
-
-      if (displayLineNum == 4) {
-        displayLineNum = 2;
-        u8g2.clearBuffer();
-        printUserInput(responseIdx - 1 < 0 ? MAX_MESSAGES - 1 : responseIdx - 1, inputIndex);
-        u8g2.setCursor(0, FONT_HEIGHT * displayLineNum);
+      if (messages[responseIdx].content[i] == ' ') {
+        delay(300);
       }
     }
 
