@@ -25,14 +25,11 @@ const char* server = "api.openai.com";
 
 const int port = 443;
 
-// Blinking Interval
-#define CURSOR_BLINK_INTERVAL 250
-
-// States
-#define GET_USER_INPUT 0
-#define GET_REPONSE 1
-#define DISPLAY_RESPONSE 2
-#define CLEAR_INPUT 3
+enum states { GET_USER_INPUT,
+              GET_REPONSE,
+              DISPLAY_RESPONSE,
+              CLEAR_INPUT,
+              UPDATE_SYS_MSG };
 
 // Display settings
 #define LINE_HEIGHT 10
@@ -44,15 +41,18 @@ const int port = 443;
 #define INPUT_BUFFER_LENGTH 40
 #define MAX_CHAT_LINES 60  // This needs better estimated
 
+
 // These reference may be useful for understanding tokens and message size
 // https://platform.openai.com/docs/api-reference/chat/create#chat/create-max_tokens
 // https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them
 // https://platform.openai.com/docs/guides/chat/introduction
+//https://platform.openai.com/tokenizer
 
 #define MAX_TOKENS 150
 #define CHARS_PER_TOKEN 6  // Each token equates to roughly 4 chars, but does not include spaces
 #define MAX_MESSAGE_LENGTH (MAX_TOKENS * CHARS_PER_TOKEN)
-#define MAX_MESSAGES 10  // Everytime you send a message, it must inlcude all previous messages in order to respond with context
+#define MAX_MESSAGES 10                  // Everytime you send a message, it must inlcude all previous messages in order to respond with context
+#define SERVER_RESPONSE_WAIT_TIME 15000  // How long to wait for a server response
 
 enum roles { sys,  //system
              user,
@@ -68,10 +68,13 @@ struct message {
   char content[MAX_MESSAGE_LENGTH];
 } messages[MAX_MESSAGES];
 
+message systemMessage = { sys, "Respond as if you were a Roman Soldier and as terse as possible." };
+message noConnect = { assistant, "I'm sorry, I seem to be having a brain fart, let me think on that again." };
+
+
 const int MAX_CHAR_PER_LINE = 20;  //SCREEN_WIDTH / FONT_WIDTH - 2;  //The minus 2 is a buffer for the right edge of the screen
 const int MAX_LINES = 5;           //SCREEN_HEIGHT / FONT_HEIGHT;
 const int CHAT_BUFFER_LENGTH = MAX_CHAR_PER_LINE * MAX_CHAT_LINES;
-//const int MAX_TOKENS = CHAT_BUFFER_LENGTH / 5;  //https://platform.openai.com/tokenizer
 
 
 /*************************************************************************/
@@ -187,7 +190,8 @@ void loop(void) {
   static DynamicJsonDocument doc(1024);
 
   // Track state
-  static byte state = GET_USER_INPUT;
+  // static byte state = GET_USER_INPUT;
+  static states state = GET_USER_INPUT;
 
   // Track messageIndex
   static int messageIndex = 0;     //offset from default
@@ -216,27 +220,32 @@ void loop(void) {
     // Handle Special Keys and text
     switch (input) {
       case PS2_KEY_ENTER:
-
+        Serial.println("Key Pressed ->Enter<-");
         messages[messageEndIndex++].role = user;
         messageEndIndex %= MAX_MESSAGES;
         numMessages++;
 
         state = GET_REPONSE;
         clearInput = true;
-        Serial.println("Enter Key Pressed");
         break;
 
       case PS2_KEY_BS:  //Backspace Pressed
+        Serial.println("Key Pressed ->Backspace<-");
         inputIndex = inputIndex > 0 ? inputIndex - 1 : 0;
         messages[messageEndIndex].content[inputIndex] = ' ';
         inputBufferFull = false;
         break;
 
       case PS2_KEY_SPACE:
+        Serial.println("Key Pressed ->Space Bar<-");
         if (!inputBufferFull) {
           messages[messageEndIndex].content[inputIndex] = ' ';
           inputIndex++;
         }
+        break;
+
+      case PS2_KEY_ESC:
+        Serial.println("Key Pressed ->Esc<-");
         break;
 
       default:
@@ -267,38 +276,65 @@ void loop(void) {
       messages[messageEndIndex].content[MAX_MESSAGE_LENGTH - 1] = '<';
     }
   }
+
   /***************************************************************************/
-  /*********** GET RESPONSE **************************************************/
+  /*********** GET RESPONSE FROM OPEN_AI *************************************/
   /***************************************************************************/
   if (state == GET_REPONSE) {
 
     Serial.println("----------------------Start GET RESPONSE---------------");
 
+    // Create a secure wifi client
     WiFiClientSecure client;
     client.setCACert(rootCACertificate);
 
+    // Generate the JSON document that will be sent to OpenAI
     DynamicJsonDocument doc(12288);
+
+    // Add static parameters that get sent with all messages https://platform.openai.com/docs/api-reference/chat/create
     doc["model"] = "gpt-3.5-turbo";
     doc["max_tokens"] = MAX_TOKENS;
 
+    // Create nested array that will hold all the system, user, and assistant messages
     JsonArray messagesJSON = doc.createNestedArray("messages");
 
-    int indexStart = 0;
+
+    /* 
+      Our array messages[] is used like a circular buffer.  
+      If the size of messages[] is 10, and we add an 11th message, 
+      then messages[0] is replaced with the 11th message. 
+      
+      This means that messages[0] may hold a message that is newer 
+      (more recent chronologically) than messages[1].
+      
+      When we send the messages to Open AI, the messages need to be in order
+      from oldest to newest.  So messagesJSON[0], DOES NOT always map to
+      messages[0].  In the case above, messagesJSON[0] would equal messages[1]
+      since messages[1] was the oldest message sent.
+
+      To maintain this chronological mapping from messages[] to messagesJSON[]
+      we introduce an new index. 
+    */
+    int oldestMsgIdx = 0;
 
     if (numMessages >= MAX_MESSAGES) {
-      indexStart = numMessages % MAX_MESSAGES;
+      oldestMsgIdx = numMessages % MAX_MESSAGES;
     }
 
-    // for (int i = messageIndex; i < messageEndIndex; i++) {
     for (int i = 0; i < numMessages && i < MAX_MESSAGES; i++) {
-      messagesJSON[i]["role"] = roleNames[messages[indexStart].role];
-      messagesJSON[i]["content"] = messages[indexStart].content;
 
-      indexStart++;
+      // Inject system message before
+      if (i == numMessages - 1 || i == MAX_MESSAGES - 1) {
+        messagesJSON[i]["role"] = roleNames[systemMessage.role];
+        messagesJSON[i]["content"] = systemMessage.content;
+        i++;
+      }
 
-      if (indexStart >= MAX_MESSAGES) {
-        indexStart = 0;
-      }  // messageIndex %= MAX_MESSAGES;
+      messagesJSON[i]["role"] = roleNames[messages[oldestMsgIdx].role];
+      messagesJSON[i]["content"] = messages[oldestMsgIdx].content;
+
+      oldestMsgIdx++;
+      oldestMsgIdx %= MAX_MESSAGES;
     }
 
     Serial.println("--------------------JSON SENT------------------------");
@@ -326,16 +362,22 @@ void loop(void) {
       serializeJson(doc, client);
       client.println();
 
-
-
       // Troubelshoot server reponse
-      /*
       String line = client.readStringUntil('X');
       Serial.print(line);
-      */
+
+      bool responseSuccess = true;
       bool oncer = false;
+      long startWaitTime = millis();
+
       // Wait for server response
       while (client.available() == 0) {
+
+        if (millis() - startWaitTime > SERVER_RESPONSE_WAIT_TIME) {
+          Serial.println("-> SERVER_RESPONSE_WAIT_TIME exceeded.");
+          responseSuccess = false;
+          break;
+        }
 
         if (!oncer) {
           u8g2.clearBuffer();
@@ -346,57 +388,69 @@ void loop(void) {
         }
       }
 
-      client.find("\r\n\r\n");
+      if (responseSuccess) {
 
-      // Filter returning JSON
-      StaticJsonDocument<500> filter;
-      JsonObject filter_choices_0_message = filter["choices"][0].createNestedObject("message");
-      filter_choices_0_message["role"] = true;
-      filter_choices_0_message["content"] = true;
+        client.find("\r\n\r\n");
 
-      StaticJsonDocument<2000> outputDoc;
-      DeserializationError error = deserializeJson(outputDoc, client, DeserializationOption::Filter(filter));
+        // Filter returning JSON
+        StaticJsonDocument<500> filter;
+        JsonObject filter_choices_0_message = filter["choices"][0].createNestedObject("message");
+        filter_choices_0_message["role"] = true;
+        filter_choices_0_message["content"] = true;
 
-      client.stop();
+        StaticJsonDocument<2000> outputDoc;
+        DeserializationError error = deserializeJson(outputDoc, client, DeserializationOption::Filter(filter));
 
-      if (error) {
-        Serial.print("deserializeJson() failed: ");
-        Serial.println(error.c_str());
-        return;
+        client.stop();
+
+        if (error) {
+          Serial.print("deserializeJson() failed: ");
+          Serial.println(error.c_str());
+          return;
+        }
+
+        messages[messageEndIndex].role = assistant;
+        // Clear char array
+        messages[messageEndIndex].content[0] = '\0';  // Why does this work?
+        // memset(messages[messageEndIndex].content, 0, sizeof messages[messageEndIndex].content);
+
+        strncpy(messages[messageEndIndex].content, outputDoc["choices"][0]["message"]["content"] | "...", MAX_MESSAGE_LENGTH);  // "\n\nArduino is a ...
+
+        responseLength = measureJson(outputDoc["choices"][0]["message"]["content"]);
+
+        Serial.println("-------------------Message Buffer----------------------");
+
+
+        for (int i = 0; i < MAX_MESSAGES; i++) {
+          Serial.print(i);
+          Serial.print(" - ");
+          Serial.println(messages[i].content);
+        }
+
+        Serial.print("\nSize of most recent reponse -> ");
+        Serial.println(responseLength);
+
+        messageEndIndex++;
+        messageEndIndex %= MAX_MESSAGES;
+        numMessages++;
+
+        state = GET_USER_INPUT;
+        printResponse = true;
+
+      } else {
+        u8g2.clearBuffer();
+        u8g2.setCursor(0, FONT_HEIGHT * 2);
+        u8g2.print("Brain freeze, 1 sec");
+        u8g2.sendBuffer();
+        
+        state = GET_REPONSE;
       }
-
-      messages[messageEndIndex].role = assistant;
-      // Clear char array
-      messages[messageEndIndex].content[0] = '\0';  // Why does this work?
-      // memset(messages[messageEndIndex].content, 0, sizeof messages[messageEndIndex].content);
-
-      strncpy(messages[messageEndIndex].content, outputDoc["choices"][0]["message"]["content"] | "...", MAX_MESSAGE_LENGTH);  // "\n\nArduino is a ...
-
-      responseLength = measureJson(outputDoc["choices"][0]["message"]["content"]);
-
-      Serial.println("-------------------Message Buffer----------------------");
-
-
-      for (int i = 0; i < MAX_MESSAGES; i++) {
-        Serial.print(i);
-        Serial.print(" - ");
-        Serial.println(messages[i].content);
-      }
-
-      Serial.print("\nSize of most recent reponse -> ");
-      Serial.println(responseLength);
-
-      messageEndIndex++;
-      messageEndIndex %= MAX_MESSAGES;
-      numMessages++;
 
     } else {
       client.stop();
       Serial.println("Connection Failed");
     }
 
-    state = GET_USER_INPUT;
-    printResponse = true;
     Serial.println("<-------------------- END Get Reponse ----------------->");
   }
 
@@ -423,7 +477,7 @@ void loop(void) {
       printUserInput(responseIdx, i);
 
       if (messages[responseIdx].content[i] == ' ') {
-        delay(300);
+        delay(100);
       }
     }
 
