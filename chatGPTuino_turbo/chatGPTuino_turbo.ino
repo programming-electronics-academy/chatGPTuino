@@ -51,7 +51,7 @@ enum states { GET_USER_INPUT,
 #define MAX_TOKENS 150
 #define CHARS_PER_TOKEN 6  // Each token equates to roughly 4 chars, but does not include spaces
 #define MAX_MESSAGE_LENGTH (MAX_TOKENS * CHARS_PER_TOKEN)
-#define MAX_MESSAGES 10                  // Everytime you send a message, it must inlcude all previous messages in order to respond with context
+#define MAX_MESSAGES 3                   // Everytime you send a message, it must inlcude all previous messages in order to respond with context
 #define SERVER_RESPONSE_WAIT_TIME 15000  // How long to wait for a server response
 
 enum roles { sys,  //system
@@ -125,6 +125,26 @@ int lengthOfToken(int startIndex, int stopIndex, char charArray[]) {
  *  mIdx: The index of the message in the message array 
  *  cIdx: The index of the messages content - the actual text
  */
+// void printUserInput(int mIdx, int cIdx) {
+
+//   u8g2.clearBuffer();
+
+//   int lineNum = 0;
+//   u8g2.setCursor(0, (FONT_HEIGHT * lineNum) - 2);
+//   int start = (cIdx > MAX_CHAR_PER_LINE * MAX_LINES) ? cIdx - (MAX_CHAR_PER_LINE * MAX_LINES) : 0;
+
+//   for (int i = start; i < cIdx; i++) {
+
+//     if (i % MAX_CHAR_PER_LINE == 0) {
+//       lineNum++;
+//       u8g2.setCursor(0, FONT_HEIGHT * lineNum);
+//     }
+
+//     u8g2.print(messages[mIdx].content[i]);
+//   }
+
+//   u8g2.sendBuffer();
+// }
 void printUserInput(int mIdx, int cIdx) {
 
   u8g2.clearBuffer();
@@ -246,14 +266,19 @@ void loop(void) {
 
       case PS2_KEY_ESC:
         Serial.println("Key Pressed ->Esc<-");
+        state = UPDATE_SYS_MSG;
         break;
 
       default:
 
         if (clearInput) {
 
+          Serial.print("Input Cleared at messages[");
+          Serial.print(messageEndIndex);
+          Serial.println("]");
+
           // Clear char array
-          messages[messageEndIndex].content[0] = '\0';
+          memset(messages[messageEndIndex].content, 0, sizeof messages[messageEndIndex].content);
 
           inputIndex = 0;  // Return index to start
           clearInput = false;
@@ -411,8 +436,8 @@ void loop(void) {
 
         messages[messageEndIndex].role = assistant;
         // Clear char array
-        messages[messageEndIndex].content[0] = '\0';  // Why does this work?
-        // memset(messages[messageEndIndex].content, 0, sizeof messages[messageEndIndex].content);
+        // messages[messageEndIndex].content[0] = '\0';
+        memset(messages[messageEndIndex].content, 0, sizeof messages[messageEndIndex].content);
 
         strncpy(messages[messageEndIndex].content, outputDoc["choices"][0]["message"]["content"] | "...", MAX_MESSAGE_LENGTH);  // "\n\nArduino is a ...
 
@@ -442,7 +467,7 @@ void loop(void) {
         u8g2.setCursor(0, FONT_HEIGHT * 2);
         u8g2.print("Brain freeze, 1 sec");
         u8g2.sendBuffer();
-        
+
         state = GET_REPONSE;
       }
 
