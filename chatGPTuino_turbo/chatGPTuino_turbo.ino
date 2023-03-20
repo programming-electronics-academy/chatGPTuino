@@ -51,7 +51,7 @@ enum states { GET_USER_INPUT,
 #define MAX_TOKENS 150
 #define CHARS_PER_TOKEN 6  // Each token equates to roughly 4 chars, but does not include spaces
 #define MAX_MESSAGE_LENGTH (MAX_TOKENS * CHARS_PER_TOKEN)
-#define MAX_MESSAGES 3                   // Everytime you send a message, it must inlcude all previous messages in order to respond with context
+#define MAX_MESSAGES 5                   // Everytime you send a message, it must inlcude all previous messages in order to respond with context
 #define SERVER_RESPONSE_WAIT_TIME 15000  // How long to wait for a server response
 
 enum roles { sys,  //system
@@ -145,7 +145,7 @@ int lengthOfToken(int startIndex, int stopIndex, char charArray[]) {
 
 //   u8g2.sendBuffer();
 // }
-void printUserInput(int mIdx, int cIdx) {
+void printUserInput(message* msg, int cIdx) {
 
   u8g2.clearBuffer();
 
@@ -160,7 +160,7 @@ void printUserInput(int mIdx, int cIdx) {
       u8g2.setCursor(0, FONT_HEIGHT * lineNum);
     }
 
-    u8g2.print(messages[mIdx].content[i]);
+    u8g2.print(msg->content[i]);
   }
 
   u8g2.sendBuffer();
@@ -206,16 +206,12 @@ void setup(void) {
 
 void loop(void) {
 
-  // static String testBuffer;
-  static DynamicJsonDocument doc(1024);
-
   // Track state
-  // static byte state = GET_USER_INPUT;
   static states state = GET_USER_INPUT;
 
   // Track messageIndex
-  static int messageIndex = 0;     //offset from default
-  static int messageEndIndex = 0;  //offset from default
+  static int messageIndex = 0;
+  static int messageEndIndex = 0;
   static int numMessages = 0;
 
   //Track input buffer index
@@ -230,42 +226,73 @@ void loop(void) {
   /***************************************************************************/
 
   // If input and buffer not full, assign characters to buffer
-  if (keyboard.available() && state == GET_USER_INPUT) {
+  if (keyboard.available() && (state == GET_USER_INPUT || state == UPDATE_SYS_MSG)) {
 
     bufferChange = true;
 
     unsigned int input = keyboard.read();
+
     input &= 0xFF;  // Get lowest bits
+
+    // Users can write User messages, or Systems messages
+    struct message* msgPtr = (state == GET_USER_INPUT)
+                               ? &messages[numMessages % MAX_MESSAGES]
+                               : &systemMessage;
 
     // Handle Special Keys and text
     switch (input) {
-      case PS2_KEY_ENTER:
-        Serial.println("Key Pressed ->Enter<-");
-        messages[messageEndIndex++].role = user;
-        messageEndIndex %= MAX_MESSAGES;
-        numMessages++;
 
-        state = GET_REPONSE;
+      case PS2_KEY_ENTER:
+
+        Serial.println("");
+        Serial.println("Enter Pressed");
+
+        if (state == GET_USER_INPUT) {
+          msgPtr->role = user;
+          // messageEndIndex %= MAX_MESSAGES;
+          numMessages++;
+          state = GET_REPONSE;
+
+          Serial.println("  User Message Submitted.");
+          Serial.println("-------------------Message Buffer----------------------");
+
+          for (int i = 0; i < MAX_MESSAGES; i++) {
+            Serial.print(i);
+            Serial.print(" - ");
+            Serial.println(messages[i].content);
+          }
+        } else {
+          msgPtr->role = sys;
+          state = GET_USER_INPUT;
+
+          Serial.println("  System Message Updated.");
+        }
+
         clearInput = true;
         break;
 
       case PS2_KEY_BS:  //Backspace Pressed
-        Serial.println("Key Pressed ->Backspace<-");
+        Serial.println("");
+        Serial.println("Backspace pressed");
+
         inputIndex = inputIndex > 0 ? inputIndex - 1 : 0;
-        messages[messageEndIndex].content[inputIndex] = ' ';
+        msgPtr->content[inputIndex] = ' ';
         inputBufferFull = false;
         break;
 
       case PS2_KEY_SPACE:
-        Serial.println("Key Pressed ->Space Bar<-");
+        Serial.print(" ");
+
         if (!inputBufferFull) {
-          messages[messageEndIndex].content[inputIndex] = ' ';
+          msgPtr->content[inputIndex] = ' ';
           inputIndex++;
         }
         break;
 
       case PS2_KEY_ESC:
-        Serial.println("Key Pressed ->Esc<-");
+        Serial.println("");
+        Serial.println("Esc pressed");
+
         state = UPDATE_SYS_MSG;
         break;
 
@@ -273,12 +300,9 @@ void loop(void) {
 
         if (clearInput) {
 
-          Serial.print("Input Cleared at messages[");
-          Serial.print(messageEndIndex);
-          Serial.println("]");
+          Serial.print("  Message cleared.");
 
-          // Clear char array
-          memset(messages[messageEndIndex].content, 0, sizeof messages[messageEndIndex].content);
+          memset(msgPtr->content, 0, sizeof msgPtr->content);
 
           inputIndex = 0;  // Return index to start
           clearInput = false;
@@ -288,7 +312,9 @@ void loop(void) {
         // Add character to current message
         if (!inputBufferFull) {
 
-          messages[messageEndIndex].content[inputIndex] = char(input);
+          Serial.print(char(input));
+
+          msgPtr->content[inputIndex] = char(input);
           inputIndex++;
         }
     }
@@ -298,7 +324,7 @@ void loop(void) {
       bufferChange = true;
       inputBufferFull = true;
 
-      messages[messageEndIndex].content[MAX_MESSAGE_LENGTH - 1] = '<';
+      msgPtr->content[MAX_MESSAGE_LENGTH - 1] = '<';
     }
   }
 
@@ -323,7 +349,6 @@ void loop(void) {
     // Create nested array that will hold all the system, user, and assistant messages
     JsonArray messagesJSON = doc.createNestedArray("messages");
 
-
     /* 
       Our array messages[] is used like a circular buffer.  
       If the size of messages[] is 10, and we add an 11th message, 
@@ -347,6 +372,8 @@ void loop(void) {
     }
 
     for (int i = 0; i < numMessages && i < MAX_MESSAGES; i++) {
+      Serial.print("numMessages ->");
+      Serial.println(numMessages);
 
       // Inject system message before
       if (i == numMessages - 1 || i == MAX_MESSAGES - 1) {
@@ -388,8 +415,8 @@ void loop(void) {
       client.println();
 
       // Troubelshoot server reponse
-      String line = client.readStringUntil('X');
-      Serial.print(line);
+      // String line = client.readStringUntil('X');
+      // Serial.print(line);
 
       bool responseSuccess = true;
       bool oncer = false;
@@ -399,7 +426,8 @@ void loop(void) {
       while (client.available() == 0) {
 
         if (millis() - startWaitTime > SERVER_RESPONSE_WAIT_TIME) {
-          Serial.println("-> SERVER_RESPONSE_WAIT_TIME exceeded.");
+          Serial.println("!!---------SERVER_RESPONSE_WAIT_TIME exceeded -----");
+
           responseSuccess = false;
           break;
         }
@@ -434,17 +462,16 @@ void loop(void) {
           return;
         }
 
-        messages[messageEndIndex].role = assistant;
-        // Clear char array
-        // messages[messageEndIndex].content[0] = '\0';
-        memset(messages[messageEndIndex].content, 0, sizeof messages[messageEndIndex].content);
+        messages[numMessages % MAX_MESSAGES].role = assistant;
 
-        strncpy(messages[messageEndIndex].content, outputDoc["choices"][0]["message"]["content"] | "...", MAX_MESSAGE_LENGTH);  // "\n\nArduino is a ...
+        // Clear char array
+        memset(messages[numMessages % MAX_MESSAGES].content, 0, sizeof messages[numMessages % MAX_MESSAGES].content);
+
+        strncpy(messages[numMessages % MAX_MESSAGES].content, outputDoc["choices"][0]["message"]["content"] | "...", MAX_MESSAGE_LENGTH);
 
         responseLength = measureJson(outputDoc["choices"][0]["message"]["content"]);
 
-        Serial.println("-------------------Message Buffer----------------------");
-
+        Serial.println("-------------------Message Buffer--------------------");
 
         for (int i = 0; i < MAX_MESSAGES; i++) {
           Serial.print(i);
@@ -484,7 +511,12 @@ void loop(void) {
   /***************************************************************************/
 
   if (bufferChange && state == GET_USER_INPUT) {
-    printUserInput(messageEndIndex, inputIndex);
+    //printUserInput(messageEndIndex, inputIndex);
+    printUserInput(&messages[numMessages % MAX_MESSAGES], inputIndex);
+  }
+
+  if (bufferChange && state == UPDATE_SYS_MSG) {
+    printUserInput(&systemMessage, inputIndex);
   }
 
   /***************************************************************************/
@@ -495,11 +527,14 @@ void loop(void) {
     Serial.println("---------------- printResponse Start----------------");
 
     // Roll over
-    int responseIdx = messageEndIndex - 1 < 0 ? MAX_MESSAGES - 1 : messageEndIndex - 1;
+    int responseIdx = (numMessages % MAX_MESSAGES) - 1 < 0
+                        ? MAX_MESSAGES - 1
+                        : numMessages % MAX_MESSAGES - 1;
+
 
     for (int i = 0; i < responseLength; i++) {
 
-      printUserInput(responseIdx, i);
+      printUserInput(&messages[responseIdx], i);
 
       if (messages[responseIdx].content[i] == ' ') {
         delay(100);
