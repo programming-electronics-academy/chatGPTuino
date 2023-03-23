@@ -1,16 +1,21 @@
 #include <Arduino.h>
 #include <U8g2lib.h>
 #include <WiFi.h>
-#include <HTTPClient.h>
+// #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include "credentials.h"
 #include <ArduinoJson.h>
+
 #include <PS2KeyAdvanced.h>
+// USE THESE KEY DEFINE -> https://github.com/techpaul/PS2KeyAdvanced/blob/master/src/PS2KeyAdvanced.h
+#include <PS2KeyMap.h>
 
 // Pins for PS/2 keyboard (through USB)
 #define DATAPIN 6  // (USB Data -)  (PS2 pin 1)
 #define IRQPIN 5   // (USB Data +)  (PS2 pin 5)
+
 PS2KeyAdvanced keyboard;
+PS2KeyMap keymap;
 
 #ifdef U8X8_HAVE_HW_SPI
 #include <SPI.h>
@@ -121,30 +126,8 @@ int lengthOfToken(int startIndex, int stopIndex, char charArray[]) {
  * -------------------------
  * Displays characters from inputBuffer to top line of OLED.
  * Clears buffer when starts.
- *
- *  mIdx: The index of the message in the message array 
- *  cIdx: The index of the messages content - the actual text
  */
-// void printUserInput(int mIdx, int cIdx) {
 
-//   u8g2.clearBuffer();
-
-//   int lineNum = 0;
-//   u8g2.setCursor(0, (FONT_HEIGHT * lineNum) - 2);
-//   int start = (cIdx > MAX_CHAR_PER_LINE * MAX_LINES) ? cIdx - (MAX_CHAR_PER_LINE * MAX_LINES) : 0;
-
-//   for (int i = start; i < cIdx; i++) {
-
-//     if (i % MAX_CHAR_PER_LINE == 0) {
-//       lineNum++;
-//       u8g2.setCursor(0, FONT_HEIGHT * lineNum);
-//     }
-
-//     u8g2.print(messages[mIdx].content[i]);
-//   }
-
-//   u8g2.sendBuffer();
-// }
 void printUserInput(message* msg, int cIdx) {
 
   u8g2.clearBuffer();
@@ -181,6 +164,7 @@ void setup(void) {
   keyboard.begin(DATAPIN, IRQPIN);
   keyboard.setNoBreak(1);   // No break codes for keys (when key released)
   keyboard.setNoRepeat(1);  // Don't repeat shift ctrl etc
+  keymap.selectMap((char*)"US");
 
   // WiFi Setup
   WiFi.begin(ssid, password);
@@ -230,101 +214,103 @@ void loop(void) {
 
     bufferChange = true;
 
-    unsigned int input = keyboard.read();
-
-    input &= 0xFF;  // Get lowest bits
+    int key = keyboard.read();
+    byte base = key & 0xff;
+    byte remappedKey = keymap.remapKey(key);
 
     // Users can write User messages, or Systems messages
     struct message* msgPtr = (state == GET_USER_INPUT)
                                ? &messages[numMessages % MAX_MESSAGES]
                                : &systemMessage;
 
-    // Handle Special Keys and text
-    switch (input) {
+    // Printable and Command Keys
+    if (remappedKey > 0) {
+      switch (base) {
 
-      case PS2_KEY_ENTER:
+        case PS2_KEY_ENTER:
 
-        Serial.println("");
-        Serial.println("Enter Pressed");
+          Serial.println("");
+          Serial.println("Enter Pressed");
 
-        if (state == GET_USER_INPUT) {
-          msgPtr->role = user;
-          // messageEndIndex %= MAX_MESSAGES;
-          numMessages++;
-          state = GET_REPONSE;
+          if (state == GET_USER_INPUT) {
+            msgPtr->role = user;
+            numMessages++;
+            state = GET_REPONSE;
 
-          Serial.println("  User Message Submitted.");
-          Serial.println("-------------------Message Buffer----------------------");
+            Serial.println("  User Message Submitted.");
+            Serial.println("-------------------Message Buffer----------------------");
 
-          for (int i = 0; i < MAX_MESSAGES; i++) {
-            Serial.print(i);
-            Serial.print(" - ");
-            Serial.println(messages[i].content);
+            for (int i = 0; i < MAX_MESSAGES; i++) {
+              Serial.print(i);
+              Serial.print(" - ");
+              Serial.println(messages[i].content);
+            }
+          } else {
+            msgPtr->role = sys;
+            state = GET_USER_INPUT;
+
+            Serial.println("  System Message Updated.");
           }
-        } else {
-          msgPtr->role = sys;
-          state = GET_USER_INPUT;
 
-          Serial.println("  System Message Updated.");
-        }
+          clearInput = true;
+          break;
 
-        clearInput = true;
-        break;
+        case PS2_KEY_DELETE:
+        case PS2_KEY_BS:  //Backspace Pressed
+          Serial.println("");
+          Serial.println("Backspace pressed");
 
-      case PS2_KEY_BS:  //Backspace Pressed
-        Serial.println("");
-        Serial.println("Backspace pressed");
-
-        inputIndex = inputIndex > 0 ? inputIndex - 1 : 0;
-        msgPtr->content[inputIndex] = ' ';
-        inputBufferFull = false;
-        break;
-
-      case PS2_KEY_SPACE:
-        Serial.print(" ");
-
-        if (!inputBufferFull) {
+          inputIndex = inputIndex > 0 ? inputIndex - 1 : 0;
           msgPtr->content[inputIndex] = ' ';
-          inputIndex++;
-        }
-        break;
-
-      case PS2_KEY_ESC:
-        Serial.println("");
-        Serial.println("Esc pressed");
-
-        state = UPDATE_SYS_MSG;
-        break;
-
-      default:
-
-        if (clearInput) {
-
-          Serial.print("  Message cleared.");
-
-          memset(msgPtr->content, 0, sizeof msgPtr->content);
-
-          inputIndex = 0;  // Return index to start
-          clearInput = false;
           inputBufferFull = false;
-        }
+          break;
 
-        // Add character to current message
-        if (!inputBufferFull) {
+        case PS2_KEY_SPACE:
+          Serial.print(" ");
 
-          Serial.print(char(input));
+          if (!inputBufferFull) {
+            msgPtr->content[inputIndex] = ' ';
+            inputIndex++;
+          }
+          break;
 
-          msgPtr->content[inputIndex] = char(input);
-          inputIndex++;
-        }
-    }
+        case PS2_KEY_ESC:
+          Serial.println("");
+          Serial.println("Esc pressed");
 
-    //If you have reached end of input buffer, display a <
-    if (inputIndex >= MAX_MESSAGE_LENGTH && !inputBufferFull) {
-      bufferChange = true;
-      inputBufferFull = true;
+          state = UPDATE_SYS_MSG;
+          break;
 
-      msgPtr->content[MAX_MESSAGE_LENGTH - 1] = '<';
+        default:
+
+          if (clearInput) {
+
+            Serial.print("  Message cleared.");
+
+            memset(msgPtr->content, 0, sizeof msgPtr->content);
+
+            inputIndex = 0;  // Return index to start
+            clearInput = false;
+            inputBufferFull = false;
+          }
+
+          // Add character to current message
+          if (!inputBufferFull) {
+
+            Serial.print(char(remappedKey));
+
+            msgPtr->content[inputIndex] = char(remappedKey);
+            inputIndex++;
+          }
+
+          //If you have reached end of input buffer, display a <
+          if (inputIndex >= MAX_MESSAGE_LENGTH && !inputBufferFull) {
+            bufferChange = true;
+            inputBufferFull = true;
+
+            msgPtr->content[MAX_MESSAGE_LENGTH - 1] = '<';
+          }
+      }
     }
   }
 
