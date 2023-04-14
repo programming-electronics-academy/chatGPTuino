@@ -137,7 +137,7 @@ int lengthOfToken(int startIndex, int stopIndex, char charArray[]) {
  * Displays contents of char array to OLED.
  * Clears OLED when starts.
  */
- void displayMsg(char msg[], int endIdx, int startIdx = 0, bool setDelay = false) {
+void displayMsg(char msg[], int endIdx, int startIdx = 0, bool setDelay = false) {
 
   u8g2.clearBuffer();
   u8g2.setCursor(0, 0);
@@ -163,13 +163,12 @@ int lengthOfToken(int startIndex, int stopIndex, char charArray[]) {
         delay(300);
         u8g2.sendBuffer();
       }
-
     }
 
     if ((count != 0) && ((count % MAX_CHARS_ON_SCREEN) == 0)) {
 
       u8g2.clearBuffer();
-      
+
       i -= MAX_CHARS_ON_SCREEN - MAX_CHAR_PER_OLED_ROW;  // Move back 4 lines
       lineNum = 0;
       firstTime = false;
@@ -207,11 +206,11 @@ int lengthOfToken(int startIndex, int stopIndex, char charArray[]) {
 //       u8g2.sendBuffer();
 //     }
 
-    
-//     // If text length exceeds printable space on OLED, 
-//     // Reprint 
+
+//     // If text length exceeds printable space on OLED,
+//     // Reprint
 //     if((count != 0) && ((count % MAX_CHARS_ON_SCREEN) == 0)) {
-      
+
 //       u8g2.clearBuffer();
 //       u8g2.sendBuffer();
 
@@ -738,6 +737,11 @@ void loop(void) {
 
     int startDisplayIdx = firstVisibleRowStartIdx + (MAX_CHAR_PER_OLED_ROW * displayOffset);
 
+    Serial.print("   BEFORE startDisplayIdx -> ");
+    Serial.print(startDisplayIdx);
+    Serial.print("   BEFORE endIDX -> ");
+    Serial.println(endIndex);
+
     if (startDisplayIdx < 0) {
       startDisplayIdx = 0;
     }
@@ -761,21 +765,10 @@ void loop(void) {
     Serial.print("   state -> ");
     Serial.println(state);
 
-
-    displayMsg(messages[responseIdx].content, endIndex, startDisplayIdx,true);
-    //for (int i = 0; i < responseLength; i++) {
-    // for (int i = startDisplayIdx; i < endIndex; i++) {
-
-    //   displayMsg(messages[responseIdx].content, i);
-
-    //   if (messages[responseIdx].content[i] == ' ' && (state == DISPLAY_RESPONSE)) {
-    //     delay(100);
-    //   }
-    // }
+    displayMsg(messages[responseIdx].content, endIndex, startDisplayIdx, state == DISPLAY_RESPONSE ? true : false);
 
     state = GET_USER_INPUT;
 
-    //printResponse = false;
     Serial.println("---------------- printResponse Stop ----------------");
   }
 }
