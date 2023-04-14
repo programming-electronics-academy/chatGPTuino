@@ -34,6 +34,7 @@ const int port = 443;
 enum states { GET_USER_INPUT,
               GET_REPONSE,
               DISPLAY_RESPONSE,
+              REVIEW_REPONSE,
               CLEAR_INPUT,
               UPDATE_SYS_MSG };
 
@@ -49,6 +50,9 @@ enum states { GET_USER_INPUT,
 #define CURSOR_START_X_AXIS 0
 #define CURSOR_START_Y_AXIS -2
 
+#define MAX_CHAR_PER_OLED_ROW 20  //Update to calculate for different screen sizes based on font size
+#define MAX_OLED_ROWS 5           //Update to calculate for different screen sizes based on font size
+#define MAX_CHARS_ON_SCREEN (MAX_CHAR_PER_OLED_ROW * MAX_OLED_ROWS)
 
 // These reference may be useful for understanding tokens and message size
 // https://platform.openai.com/docs/api-reference/chat/create#chat/create-max_tokens
@@ -61,6 +65,8 @@ enum states { GET_USER_INPUT,
 #define MAX_MESSAGE_LENGTH (MAX_TOKENS * CHARS_PER_TOKEN)
 #define MAX_MESSAGES 5                   // Everytime you send a message, it must inlcude all previous messages in order to respond with context
 #define SERVER_RESPONSE_WAIT_TIME 15000  // How long to wait for a server response
+
+const int CHAT_BUFFER_LENGTH = MAX_CHAR_PER_OLED_ROW * MAX_CHAT_LINES;
 
 enum roles { sys,  //system
              user,
@@ -75,14 +81,10 @@ struct message {
   char content[MAX_MESSAGE_LENGTH];
 } messages[MAX_MESSAGES];
 
-message systemMessage = { sys, "Respond as if you were a Roman Soldier and as terse as possible." };
+message systemMessage = { sys, "Respond as if you were a pirate." };
 message noConnect = { assistant, "I'm sorry, I seem to be having a brain fart, let me think on that again." };
 
 
-const int MAX_CHAR_PER_OLED_ROW = 20;  //SCREEN_WIDTH / FONT_WIDTH - 2;  //The minus 2 is a buffer for the right edge of the screen
-const int MAX_OLED_ROWS = 5;           //SCREEN_HEIGHT / FONT_HEIGHT;
-#define MAX_CHARS_ON_SCREEN MAX_CHAR_PER_OLED_ROW* MAX_OLED_ROWS
-const int CHAT_BUFFER_LENGTH = MAX_CHAR_PER_OLED_ROW * MAX_CHAT_LINES;
 
 #define ALERT_MSG_LENGTH 70
 char SYSTEM_MSG_UPDATE_INITIATE_ALERT[ALERT_MSG_LENGTH] = "Enter new system message.";
@@ -135,18 +137,17 @@ int lengthOfToken(int startIndex, int stopIndex, char charArray[]) {
  * Displays contents of char array to OLED.
  * Clears OLED when starts.
  */
-
-void displayMsg(char msg[], int cIdx) {
+ void displayMsg(char msg[], int endIdx, int startIdx = 0, bool setDelay = false) {
 
   u8g2.clearBuffer();
-  u8g2.setCursor(CURSOR_START_X_AXIS, CURSOR_START_Y_AXIS);
+  u8g2.setCursor(0, 0);
 
   int lineNum = 0;
-  int start = (cIdx > MAX_CHARS_ON_SCREEN)
-                ? cIdx - MAX_CHARS_ON_SCREEN
-                : 0;
 
-  for (int i = start; i < cIdx; i++) {
+  int i, count;
+  bool firstTime = true;
+
+  for (i = startIdx, count = 1; i < endIdx; i++, count++) {
 
     if (i % MAX_CHAR_PER_OLED_ROW == 0) {
       lineNum++;
@@ -154,10 +155,101 @@ void displayMsg(char msg[], int cIdx) {
     }
 
     u8g2.print(msg[i]);
+
+    // Delay at spaces
+    if ((msg[i] == ' ' && setDelay)) {
+
+      if (firstTime || lineNum == 5) {
+        delay(300);
+        u8g2.sendBuffer();
+      }
+
+    }
+
+    if ((count != 0) && ((count % MAX_CHARS_ON_SCREEN) == 0)) {
+
+      u8g2.clearBuffer();
+      
+      i -= MAX_CHARS_ON_SCREEN - MAX_CHAR_PER_OLED_ROW;  // Move back 4 lines
+      lineNum = 0;
+      firstTime = false;
+    }
   }
 
   u8g2.sendBuffer();
 }
+
+// void displayMsg(char msg[], int endIdx, int startIdx = 0, bool setDelay = false) {
+
+//   u8g2.clearBuffer();
+//   u8g2.setCursor(CURSOR_START_X_AXIS, CURSOR_START_Y_AXIS);
+
+//   int lineNum = 0;
+//   // int start = (endIdx > MAX_CHARS_ON_SCREEN)
+//   //               ? endIdx - MAX_CHARS_ON_SCREEN
+//   //               : 0;
+
+//   int i, count;
+//   bool firstTime = true;
+
+//   for (i = startIdx, count = 1; i < endIdx; i++, count++) {
+
+//     if (i % MAX_CHAR_PER_OLED_ROW == 0) {
+//       lineNum++;
+//       u8g2.setCursor(0, FONT_HEIGHT * lineNum);
+//     }
+
+//     u8g2.print(msg[i]);
+
+//     // Delay at spaces
+//     if ((msg[i] == ' ' && setDelay) /*&& (firstTime || lineNum == 5)*/) {
+//       delay(100);
+//       u8g2.sendBuffer();
+//     }
+
+    
+//     // If text length exceeds printable space on OLED, 
+//     // Reprint 
+//     if((count != 0) && ((count % MAX_CHARS_ON_SCREEN) == 0)) {
+      
+//       u8g2.clearBuffer();
+//       u8g2.sendBuffer();
+
+//       i -= MAX_CHARS_ON_SCREEN - MAX_CHAR_PER_OLED_ROW; // Move back 4 lines
+//       lineNum = 0;
+//       firstTime = false;
+//       Serial.print("i-> ");
+//       Serial.print(i);
+//       Serial.print("  Count-> ");
+//       Serial.println(count);
+//     }
+//   }
+
+//   u8g2.sendBuffer();
+// }
+
+// void displayMsg(char msg[], int cIdx) {
+
+//   u8g2.clearBuffer();
+//   u8g2.setCursor(CURSOR_START_X_AXIS, CURSOR_START_Y_AXIS);
+
+//   int lineNum = 0;
+//   int start = (cIdx > MAX_CHARS_ON_SCREEN)
+//                 ? cIdx - MAX_CHARS_ON_SCREEN
+//                 : 0;
+
+//   for (int i = start; i < cIdx; i++) {
+
+//     if (i % MAX_CHAR_PER_OLED_ROW == 0) {
+//       lineNum++;
+//       u8g2.setCursor(0, FONT_HEIGHT * lineNum);
+//     }
+
+//     u8g2.print(msg[i]);
+//   }
+
+//   u8g2.sendBuffer();
+// }
 
 /*
  * Function:  displayFace
@@ -167,11 +259,11 @@ void displayMsg(char msg[], int cIdx) {
 void displayFace(int iterations, char displayMessage[]) {
 
   int bitmapIndex;
-  
+
   for (int i = 0; i <= iterations; i++) {
-    
+
     randomSeed(analogRead(0));
-    int randomBlink = random(1,iterations);
+    int randomBlink = random(1, iterations);
     if (i % randomBlink == 0) {
       bitmapIndex = eyes_closed;
     } else if (i % 2 == 0) {
@@ -225,7 +317,7 @@ void setup(void) {
   u8g2.setFont(u8g2_font_6x13_tf);  //https://github.com/olikraus/u8g2/wiki/fntlist12
 
   char welcomeMessage[] = "Hi. I'm chatGPTuino.";
-  displayFace(100, welcomeMessage);
+  displayFace(10, welcomeMessage);
   displayMsg(WELCOME_INSTRUCTIONS_ALERT, ALERT_MSG_LENGTH);
 
   Serial.println("...Setup Ended");
@@ -252,6 +344,9 @@ void loop(void) {
   static boolean printResponse = false;
   boolean bufferChange = false;
 
+  //Display Response Se
+  static int displayOffset = 0;
+
   // Users can write User messages, or Systems messages
   struct message* msgPtr = (state == GET_USER_INPUT)
                              ? &messages[numMessages % MAX_MESSAGES]
@@ -264,9 +359,21 @@ void loop(void) {
   // If input and buffer not full, assign characters to buffer
   if (keyboard.available() && (state == GET_USER_INPUT || state == UPDATE_SYS_MSG)) {
 
+
+    Serial.println("Start: User Input.");
+
     int key = keyboard.read();
     byte base = key & 0xff;
     byte remappedKey = keymap.remapKey(key);
+
+    /*
+    Serial.print("Key -> ");
+    Serial.println(key);
+    Serial.print("Base -> ");
+    Serial.println(base);
+    Serial.print("remappedKey -> ");
+    Serial.println(remappedKey);
+*/
 
     // Printable and Command Keys
     if (remappedKey > 0) {
@@ -284,6 +391,7 @@ void loop(void) {
             msgPtr->role = user;
             numMessages++;
             state = GET_REPONSE;
+            displayOffset = 0;
 
             Serial.println("  User Message Submitted.");
             Serial.println("-------------------Message Buffer----------------------");
@@ -299,7 +407,6 @@ void loop(void) {
             state = GET_USER_INPUT;
             displayMsg(SYSTEM_MSG_UPDATE_SUCCESS_ALERT, ALERT_MSG_LENGTH);
             bufferChange = false;  // Do not update display
-
             Serial.println("  System Message Updated.");
           }
 
@@ -337,6 +444,7 @@ void loop(void) {
 
           break;
 
+
         default:
 
           if (clearInput) {
@@ -367,7 +475,45 @@ void loop(void) {
             msgPtr->content[MAX_MESSAGE_LENGTH - 1] = '<';
           }
       }
+    } else {
+
+      switch (base) {
+        case PS2_KEY_UP_ARROW:
+          Serial.println("");
+          Serial.println("Up Arrow pressed");
+
+          displayOffset--;
+
+          state = REVIEW_REPONSE;
+
+          Serial.print("displayOffset -> ");
+          Serial.println(displayOffset);
+
+          break;
+
+        case PS2_KEY_DN_ARROW:
+
+          Serial.println("");
+          Serial.println("Down Arrow pressed");
+
+          // Move the display index up/back one line
+          displayOffset++;
+
+          if (displayOffset > 0) {
+            displayOffset = 0;
+          }
+
+          // printResponse = true;
+          state = REVIEW_REPONSE;
+
+          Serial.print("displayOffset -> ");
+          Serial.println(displayOffset);
+
+          break;
+      }
     }
+
+    Serial.println("End: User Input.");
   }
 
   /***************************************************************************/
@@ -464,7 +610,7 @@ void loop(void) {
       // Serial.print(line);
 
       bool responseSuccess = true;
-      bool oncer = false;
+      // bool oncer = false;
       long startWaitTime = millis();
       char thinkingMsg[] = "Thinking...";
       // Wait for server response
@@ -532,8 +678,9 @@ void loop(void) {
         messageEndIndex %= MAX_MESSAGES;
         numMessages++;
 
-        state = GET_USER_INPUT;
-        printResponse = true;
+        //state = GET_USER_INPUT;
+        state = DISPLAY_RESPONSE;
+        //printResponse = true;
 
       } else {
         u8g2.clearBuffer();
@@ -566,9 +713,11 @@ void loop(void) {
   /***************************************************************************/
   /***** Print Response one word at a time **********************************/
   /***************************************************************************/
-  if (printResponse) {
+  // if (printResponse) {
+  if (state == DISPLAY_RESPONSE || state == REVIEW_REPONSE) {
 
     Serial.println("---------------- printResponse Start----------------");
+
 
     // Roll over
     int responseIdx = (numMessages % MAX_MESSAGES) - 1 < 0
@@ -576,17 +725,57 @@ void loop(void) {
                         : numMessages % MAX_MESSAGES - 1;
 
 
-    for (int i = 0; i < responseLength; i++) {
 
-      // displayMsg(&messages[responseIdx]->content, i);
-      displayMsg(messages[responseIdx].content, i);
+    int lastRowStartIdx = (responseLength / MAX_CHAR_PER_OLED_ROW) * MAX_CHAR_PER_OLED_ROW;
 
-      if (messages[responseIdx].content[i] == ' ') {
-        delay(100);
-      }
+    int firstVisibleRowStartIdx = lastRowStartIdx - MAX_CHARS_ON_SCREEN + MAX_CHAR_PER_OLED_ROW;
+
+    // Reset display offset every time a new message is revieced
+    if (state == DISPLAY_RESPONSE) {
+      displayOffset = 0;
+      firstVisibleRowStartIdx = 0;
     }
 
-    printResponse = false;
+    int startDisplayIdx = firstVisibleRowStartIdx + (MAX_CHAR_PER_OLED_ROW * displayOffset);
+
+    if (startDisplayIdx < 0) {
+      startDisplayIdx = 0;
+    }
+
+    // Display entire message first time assistant responds
+    int endIndex = (state == DISPLAY_RESPONSE)
+                     ? responseLength
+                     : MAX_CHARS_ON_SCREEN;
+
+
+    Serial.print("responseLength -> ");
+    Serial.print(responseLength);
+    Serial.print("   lastRowStartIdx -> ");
+    Serial.print(lastRowStartIdx);
+    Serial.print("   firstVisibleRowStartIdx -> ");
+    Serial.print(firstVisibleRowStartIdx);
+    Serial.print("   startDisplayIdx -> ");
+    Serial.print(startDisplayIdx);
+    Serial.print("   endIDX -> ");
+    Serial.print(endIndex);
+    Serial.print("   state -> ");
+    Serial.println(state);
+
+
+    displayMsg(messages[responseIdx].content, endIndex, startDisplayIdx,true);
+    //for (int i = 0; i < responseLength; i++) {
+    // for (int i = startDisplayIdx; i < endIndex; i++) {
+
+    //   displayMsg(messages[responseIdx].content, i);
+
+    //   if (messages[responseIdx].content[i] == ' ' && (state == DISPLAY_RESPONSE)) {
+    //     delay(100);
+    //   }
+    // }
+
+    state = GET_USER_INPUT;
+
+    //printResponse = false;
     Serial.println("---------------- printResponse Stop ----------------");
   }
 }
