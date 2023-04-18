@@ -108,6 +108,7 @@ U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* clock=*/SCL, /* data=*/SDA,
 /*******  FUNCTIONS ******************************************************/
 /*************************************************************************/
 
+
 /*
  * Function:  displayMsg 
  * -------------------------
@@ -673,7 +674,7 @@ void loop(void) {
 
       if (startIdx < 0) {
         startIdx = 0;
-        displayOffset++; // 
+        displayOffset++;  //
       }
 
       endIdx = startIdx + MAX_CHARS_ON_SCREEN - 1;
