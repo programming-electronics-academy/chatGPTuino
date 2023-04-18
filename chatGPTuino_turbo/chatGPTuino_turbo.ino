@@ -109,29 +109,6 @@ U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* clock=*/SCL, /* data=*/SDA,
 /*************************************************************************/
 
 /*
- * Function:  lengthOfToken 
- * -------------------------
- * computes length of 'word/token' in a character array by measuring distance to next space
- *
- *  startIndex: index to start at
- *  stopIndex: index to end at.  Usually length of charArray
- *  charArray: char array to inspect
- *
- *  returns early: length of next word
- *  returns: -1 if no space is found
- */
-int lengthOfToken(int startIndex, int stopIndex, char charArray[]) {
-
-  for (int i = 0; i < stopIndex - startIndex; i++) {
-    if (charArray[i + startIndex] == ' ') {
-      return i;
-    }
-  }
-  return -1;
-}
-
-
-/*
  * Function:  displayMsg 
  * -------------------------
  * Displays contents of char array to OLED.
@@ -178,77 +155,6 @@ void displayMsg(char msg[], int endIdx, int startIdx = 0, bool setDelay = false)
   u8g2.sendBuffer();
 }
 
-// void displayMsg(char msg[], int endIdx, int startIdx = 0, bool setDelay = false) {
-
-//   u8g2.clearBuffer();
-//   u8g2.setCursor(CURSOR_START_X_AXIS, CURSOR_START_Y_AXIS);
-
-//   int lineNum = 0;
-//   // int start = (endIdx > MAX_CHARS_ON_SCREEN)
-//   //               ? endIdx - MAX_CHARS_ON_SCREEN
-//   //               : 0;
-
-//   int i, count;
-//   bool firstTime = true;
-
-//   for (i = startIdx, count = 1; i < endIdx; i++, count++) {
-
-//     if (i % MAX_CHAR_PER_OLED_ROW == 0) {
-//       lineNum++;
-//       u8g2.setCursor(0, FONT_HEIGHT * lineNum);
-//     }
-
-//     u8g2.print(msg[i]);
-
-//     // Delay at spaces
-//     if ((msg[i] == ' ' && setDelay) /*&& (firstTime || lineNum == 5)*/) {
-//       delay(100);
-//       u8g2.sendBuffer();
-//     }
-
-
-//     // If text length exceeds printable space on OLED,
-//     // Reprint
-//     if((count != 0) && ((count % MAX_CHARS_ON_SCREEN) == 0)) {
-
-//       u8g2.clearBuffer();
-//       u8g2.sendBuffer();
-
-//       i -= MAX_CHARS_ON_SCREEN - MAX_CHAR_PER_OLED_ROW; // Move back 4 lines
-//       lineNum = 0;
-//       firstTime = false;
-//       Serial.print("i-> ");
-//       Serial.print(i);
-//       Serial.print("  Count-> ");
-//       Serial.println(count);
-//     }
-//   }
-
-//   u8g2.sendBuffer();
-// }
-
-// void displayMsg(char msg[], int cIdx) {
-
-//   u8g2.clearBuffer();
-//   u8g2.setCursor(CURSOR_START_X_AXIS, CURSOR_START_Y_AXIS);
-
-//   int lineNum = 0;
-//   int start = (cIdx > MAX_CHARS_ON_SCREEN)
-//                 ? cIdx - MAX_CHARS_ON_SCREEN
-//                 : 0;
-
-//   for (int i = start; i < cIdx; i++) {
-
-//     if (i % MAX_CHAR_PER_OLED_ROW == 0) {
-//       lineNum++;
-//       u8g2.setCursor(0, FONT_HEIGHT * lineNum);
-//     }
-
-//     u8g2.print(msg[i]);
-//   }
-
-//   u8g2.sendBuffer();
-// }
 
 /*
  * Function:  displayFace
@@ -372,7 +278,7 @@ void loop(void) {
     Serial.println(base);
     Serial.print("remappedKey -> ");
     Serial.println(remappedKey);
-*/
+    */
 
     // Printable and Command Keys
     if (remappedKey > 0) {
@@ -717,55 +623,123 @@ void loop(void) {
 
     Serial.println("---------------- printResponse Start----------------");
 
-
     // Roll over
     int responseIdx = (numMessages % MAX_MESSAGES) - 1 < 0
                         ? MAX_MESSAGES - 1
                         : numMessages % MAX_MESSAGES - 1;
 
 
+    // Calculate the start and end display indices for the response and for  "response scrubbing" (ie, when the user presses up and down arrows to look through response on OLED)
 
-    int lastRowStartIdx = (responseLength / MAX_CHAR_PER_OLED_ROW) * MAX_CHAR_PER_OLED_ROW;
+    int startIdx;
+    int endIdx;
 
-    int firstVisibleRowStartIdx = lastRowStartIdx - MAX_CHARS_ON_SCREEN + MAX_CHAR_PER_OLED_ROW;
+    if (state == DISPLAY_RESPONSE) {
+
+      startIdx = 0;
+      endIdx = responseLength;
+
+      // Reset display offset every time a new message is revieced
+      displayOffset = 0;
+
+      Serial.print("responseLength -> ");
+      Serial.print(responseLength);
+      Serial.print("   startIdx -> ");
+      Serial.print(startIdx);
+      Serial.print("   endIdx -> ");
+      Serial.print(endIdx);
+      Serial.print("   state -> ");
+      Serial.println(state);
+
+    } else {
+
+      // How many spaces are needed to complete the last row
+      byte spacesToCompleteLastRow = MAX_CHAR_PER_OLED_ROW - responseLength % MAX_CHAR_PER_OLED_ROW;
+
+      // Count full rows of text in response
+      int fullRowsOfText = (responseLength + spacesToCompleteLastRow) / MAX_CHAR_PER_OLED_ROW;  // This should always be a whole number
+
+      // Calculate index at the end of the last row in response
+      int endFrameLastIdx = (fullRowsOfText * MAX_CHAR_PER_OLED_ROW);
+
+      // Calculate the first index in the "End of Respone 'Frame'"
+      int endFrameFirstIdx = endFrameLastIdx - MAX_CHARS_ON_SCREEN;
+
+      // Calculate display adjustment due to up/down arrow presses
+      int scrubAdj = displayOffset * MAX_CHAR_PER_OLED_ROW;
+
+      // Determine start/ end indices
+      startIdx = endFrameFirstIdx + scrubAdj;
+
+      if (startIdx < 0) {
+        startIdx = 0;
+      }
+
+      endIdx = startIdx + MAX_CHARS_ON_SCREEN - 1;
+
+      Serial.print("responseLength -> ");
+      Serial.print(responseLength);
+      Serial.print("   fullRowsOfText -> ");
+      Serial.print(fullRowsOfText);
+      Serial.print("   endFrameLastIdx -> ");
+      Serial.print(endFrameLastIdx);
+      Serial.print("   endFrameFirstIdx -> ");
+      Serial.print(endFrameFirstIdx);
+      Serial.print("   scrubAdj -> ");
+      Serial.print(scrubAdj);
+      Serial.print("   startIdx -> ");
+      Serial.print(startIdx);
+      Serial.print("   endIdx -> ");
+      Serial.print(endIdx);
+      Serial.print("   state -> ");
+      Serial.println(state);
+    }
+
+
+
+
+
+
+    // int lastRowStartIdx = (responseLength / MAX_CHAR_PER_OLED_ROW) * MAX_CHAR_PER_OLED_ROW;
+
+    // int firstVisibleRowStartIdx = lastRowStartIdx - MAX_CHARS_ON_SCREEN + MAX_CHAR_PER_OLED_ROW;
 
     // Reset display offset every time a new message is revieced
-    if (state == DISPLAY_RESPONSE) {
-      displayOffset = 0;
-      firstVisibleRowStartIdx = 0;
-    }
+    // if (state == DISPLAY_RESPONSE) {
+    //   displayOffset = 0;
+    //   firstVisibleRowStartIdx = 0;
+    // }
 
-    int startDisplayIdx = firstVisibleRowStartIdx + (MAX_CHAR_PER_OLED_ROW * displayOffset);
+    // int startDisplayIdx = firstVisibleRowStartIdx + (MAX_CHAR_PER_OLED_ROW * displayOffset);
 
-    Serial.print("   BEFORE startDisplayIdx -> ");
-    Serial.print(startDisplayIdx);
-    Serial.print("   BEFORE endIDX -> ");
-    Serial.println(endIndex);
+    // Serial.print("   BEFORE startDisplayIdx -> ");
+    // Serial.print(startDisplayIdx);
 
-    if (startDisplayIdx < 0) {
-      startDisplayIdx = 0;
-    }
+    // if (startDisplayIdx < 0) {
+    //   startDisplayIdx = 0;
+    // }
 
     // Display entire message first time assistant responds
-    int endIndex = (state == DISPLAY_RESPONSE)
-                     ? responseLength
-                     : MAX_CHARS_ON_SCREEN;
+    // int endIndex = (state == DISPLAY_RESPONSE)
+    //                  ? responseLength
+    //                  : MAX_CHARS_ON_SCREEN - 1;
 
 
-    Serial.print("responseLength -> ");
-    Serial.print(responseLength);
-    Serial.print("   lastRowStartIdx -> ");
-    Serial.print(lastRowStartIdx);
-    Serial.print("   firstVisibleRowStartIdx -> ");
-    Serial.print(firstVisibleRowStartIdx);
-    Serial.print("   startDisplayIdx -> ");
-    Serial.print(startDisplayIdx);
-    Serial.print("   endIDX -> ");
-    Serial.print(endIndex);
-    Serial.print("   state -> ");
-    Serial.println(state);
+    // Serial.print("responseLength -> ");
+    // Serial.print(responseLength);
+    // Serial.print("   lastRowStartIdx -> ");
+    // Serial.print(lastRowStartIdx);
+    // Serial.print("   firstVisibleRowStartIdx -> ");
+    // Serial.print(firstVisibleRowStartIdx);
+    // Serial.print("   startDisplayIdx -> ");
+    // Serial.print(startDisplayIdx);
+    // Serial.print("   endIDX -> ");
+    // Serial.print(endIndex);
+    // Serial.print("   state -> ");
+    // Serial.println(state);
 
-    displayMsg(messages[responseIdx].content, endIndex, startDisplayIdx, state == DISPLAY_RESPONSE ? true : false);
+    displayMsg(messages[responseIdx].content, endIdx, startIdx, state == DISPLAY_RESPONSE ? true : false);
+    // displayMsg(messages[responseIdx].content, endIndex, startDisplayIdx, state == DISPLAY_RESPONSE ? true : false);
 
     state = GET_USER_INPUT;
 
