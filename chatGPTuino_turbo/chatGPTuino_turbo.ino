@@ -673,6 +673,7 @@ void loop(void) {
 
       if (startIdx < 0) {
         startIdx = 0;
+        displayOffset++; // 
       }
 
       endIdx = startIdx + MAX_CHARS_ON_SCREEN - 1;
