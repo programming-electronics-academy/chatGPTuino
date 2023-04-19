@@ -256,9 +256,12 @@ void loop(void) {
 
 
   /* 
-    The msgPtr is used for assigning user input to either:
+    The msgPtr is used for assigning keyboard input text to either:
     -> the system message or,
-    -> the user message 
+    -> a user message in the messages array
+    It is assigned based on the current state.
+
+    The msgPtr is also used for displaying the user keyboard input text.
   */
   struct message* msgPtr = (state == GET_USER_INPUT)
                              ? &messages[numMessages % MAX_MESSAGES]
@@ -275,8 +278,11 @@ void loop(void) {
     byte base = key & 0xff;
     byte remappedKey = keymap.remapKey(key);
 
-    // Printable and Command Keys
-    if (remappedKey > 0) {
+    //Check if up or down arrow pressed
+    boolean arrowKeyPressed = (base == PS2_KEY_UP_ARROW) || (base == PS2_KEY_DN_ARROW);
+
+    // Printable and Select Command Keys
+    if (remappedKey > 0 || arrowKeyPressed) {
 
       bufferChange = true;
 
@@ -330,9 +336,8 @@ void loop(void) {
           break;
 
         case PS2_KEY_DELETE:
-        case PS2_KEY_BS:  //Backspace Pressed
-          Serial.println("");
-          Serial.println("Backspace pressed");
+        case PS2_KEY_BS:
+          Serial.println("KeyPressed-> Backspace/Delete ");
 
           inputIndex = inputIndex > 0 ? inputIndex - 1 : 0;
           msgPtr->content[inputIndex] = ' ';
@@ -341,7 +346,7 @@ void loop(void) {
 
         case PS2_KEY_TAB:
         case PS2_KEY_SPACE:
-          Serial.print(" ");
+          Serial.print("KeyPressed-> Space/Tab");
 
           if (!inputBufferFull) {
             msgPtr->content[inputIndex] = ' ';
@@ -350,14 +355,35 @@ void loop(void) {
           break;
 
         case PS2_KEY_ESC:
-          Serial.println("");
-          Serial.println("Esc pressed");
-          Serial.println("  System Message Update...");
-
+          Serial.println("KeyPressed-> Esc");
           displayMsg(SYSTEM_MSG_UPDATE_INITIATE_ALERT, ALERT_MSG_LENGTH);
           state = UPDATE_SYS_MSG;
+          inputIndex = 0;
           bufferChange = false;  // Do not update display
 
+          break;
+
+        case PS2_KEY_UP_ARROW:
+
+          Serial.println("KeyPressed-> Up Arrow");
+
+          displayOffset--;
+          state = REVIEW_REPONSE;
+
+          break;
+
+        case PS2_KEY_DN_ARROW:
+
+          Serial.println("KeyPressed-> Down Arrow");
+
+          // Move the display index up/back one line
+          displayOffset++;
+
+          if (displayOffset > 0) {
+            displayOffset = 0;
+          }
+
+          state = REVIEW_REPONSE;
           break;
 
 
@@ -365,7 +391,7 @@ void loop(void) {
 
           if (clearInput) {
 
-            Serial.print("  Message cleared.");
+            Serial.print("  | Message cleared.");
 
             memset(msgPtr->content, 0, sizeof msgPtr->content);
 
@@ -391,69 +417,58 @@ void loop(void) {
             msgPtr->content[MAX_MESSAGE_LENGTH - 1] = '<';
           }
       }
-    } else {
-
-      switch (base) {
-        case PS2_KEY_UP_ARROW:
-          Serial.println("");
-          Serial.println("Up Arrow pressed");
-
-          displayOffset--;
-
-          state = REVIEW_REPONSE;
-
-          Serial.print("displayOffset -> ");
-          Serial.println(displayOffset);
-
-          break;
-
-        case PS2_KEY_DN_ARROW:
-
-          Serial.println("");
-          Serial.println("Down Arrow pressed");
-
-          // Move the display index up/back one line
-          displayOffset++;
-
-          if (displayOffset > 0) {
-            displayOffset = 0;
-          }
-
-          // printResponse = true;
-          state = REVIEW_REPONSE;
-
-          Serial.print("displayOffset -> ");
-          Serial.println(displayOffset);
-
-          break;
-      }
     }
+    // else {
 
-    Serial.println("End: User Input.");
+    //   switch (base) {
+    //     case PS2_KEY_UP_ARROW:
+
+    //       Serial.println("KeyPressed-> Up Arrow");
+
+    //       displayOffset--;
+    //       state = REVIEW_REPONSE;
+
+    //       break;
+
+    //     case PS2_KEY_DN_ARROW:
+
+    //       Serial.println("KeyPressed-> Down Arrow");
+
+    //       // Move the display index up/back one line
+    //       displayOffset++;
+
+    //       if (displayOffset > 0) {
+    //         displayOffset = 0;
+    //       }
+
+    //       state = REVIEW_REPONSE;
+    //       break;
+    //   }
   }
+// }
 
-  /***************************************************************************/
-  /*********** GET RESPONSE FROM OPEN_AI *************************************/
-  /***************************************************************************/
-  if (state == GET_REPONSE) {
+/***************************************************************************/
+/*********** GET RESPONSE FROM OPEN_AI *************************************/
+/***************************************************************************/
+if (state == GET_REPONSE) {
 
-    Serial.println("----------------------Start GET RESPONSE---------------");
+  Serial.println("----------------------Start GET RESPONSE---------------");
 
-    // Create a secure wifi client
-    WiFiClientSecure client;
-    client.setCACert(rootCACertificate);
+  // Create a secure wifi client
+  WiFiClientSecure client;
+  client.setCACert(rootCACertificate);
 
-    // Generate the JSON document that will be sent to OpenAI
-    DynamicJsonDocument doc(12288);
+  // Generate the JSON document that will be sent to OpenAI
+  DynamicJsonDocument doc(12288);
 
-    // Add static parameters that get sent with all messages https://platform.openai.com/docs/api-reference/chat/create
-    doc["model"] = "gpt-3.5-turbo";
-    doc["max_tokens"] = MAX_TOKENS;
+  // Add static parameters that get sent with all messages https://platform.openai.com/docs/api-reference/chat/create
+  doc["model"] = "gpt-3.5-turbo";
+  doc["max_tokens"] = MAX_TOKENS;
 
-    // Create nested array that will hold all the system, user, and assistant messages
-    JsonArray messagesJSON = doc.createNestedArray("messages");
+  // Create nested array that will hold all the system, user, and assistant messages
+  JsonArray messagesJSON = doc.createNestedArray("messages");
 
-    /* 
+  /* 
       Our array messages[] is used like a circular buffer.  
       If the size of messages[] is 10, and we add an 11th message, 
       then messages[0] is replaced with the 11th message. 
@@ -469,240 +484,240 @@ void loop(void) {
       To maintain this chronological mapping from messages[] to messagesJSON[]
       we introduce an new index. 
     */
-    int oldestMsgIdx = 0;
+  int oldestMsgIdx = 0;
 
-    if (numMessages >= MAX_MESSAGES) {
-      oldestMsgIdx = numMessages % MAX_MESSAGES;
+  if (numMessages >= MAX_MESSAGES) {
+    oldestMsgIdx = numMessages % MAX_MESSAGES;
+  }
+
+  for (int i = 0; i < numMessages && i < MAX_MESSAGES; i++) {
+    Serial.print("numMessages ->");
+    Serial.println(numMessages);
+
+    // Inject system message before
+    if (i == numMessages - 1 || i == MAX_MESSAGES - 1) {
+      messagesJSON[i]["role"] = roleNames[systemMessage.role];
+      messagesJSON[i]["content"] = systemMessage.content;
+      i++;
     }
 
-    for (int i = 0; i < numMessages && i < MAX_MESSAGES; i++) {
-      Serial.print("numMessages ->");
-      Serial.println(numMessages);
+    messagesJSON[i]["role"] = roleNames[messages[oldestMsgIdx].role];
+    messagesJSON[i]["content"] = messages[oldestMsgIdx].content;
 
-      // Inject system message before
-      if (i == numMessages - 1 || i == MAX_MESSAGES - 1) {
-        messagesJSON[i]["role"] = roleNames[systemMessage.role];
-        messagesJSON[i]["content"] = systemMessage.content;
-        i++;
+    oldestMsgIdx++;
+    oldestMsgIdx %= MAX_MESSAGES;
+  }
+
+  Serial.println("");
+  Serial.println("<-------------------JSON TO BE SENT--------------------->");
+  serializeJsonPretty(doc, Serial);
+  Serial.println("");
+
+  int conn = client.connect(server, port);
+
+  delay(1000);
+
+  if (conn == 1) {
+    Serial.println();
+    Serial.println("Sending Parameters...");
+    //Request
+    client.println("POST https://api.openai.com/v1/chat/completions HTTP/1.1");
+    //Headers
+    client.print("Host: ");
+    client.println(server);
+    client.println("Content-Type: application/json");
+    client.print("Content-Length: ");
+    client.println(measureJson(doc));
+    client.print("Authorization: ");
+    client.println(openAI_Private_key);
+    client.println("Connection: Close");
+    client.println();
+    // Body
+    serializeJson(doc, client);
+    client.println();
+
+    // Troubelshoot server reponse
+    // String line = client.readStringUntil('X'); //NOTE -> this will make wait for server response below execute - neesds chanded...
+    // Serial.print(line);
+
+    bool responseSuccess = true;
+    // bool oncer = false;
+    long startWaitTime = millis();
+    char thinkingMsg[] = "Thinking...";
+
+    // Wait for server response
+    while (client.available() == 0) {
+
+      if (millis() - startWaitTime > SERVER_RESPONSE_WAIT_TIME) {
+        Serial.println("!!---------SERVER_RESPONSE_WAIT_TIME exceeded -----");
+
+        responseSuccess = false;
+        break;
       }
 
-      messagesJSON[i]["role"] = roleNames[messages[oldestMsgIdx].role];
-      messagesJSON[i]["content"] = messages[oldestMsgIdx].content;
-
-      oldestMsgIdx++;
-      oldestMsgIdx %= MAX_MESSAGES;
+      displayFace(5, thinkingMsg);
     }
 
-    Serial.println("");
-    Serial.println("<-------------------JSON TO BE SENT--------------------->");
-    serializeJsonPretty(doc, Serial);
-    Serial.println("");
+    if (responseSuccess) {
 
-    int conn = client.connect(server, port);
+      client.find("\r\n\r\n");
 
-    delay(1000);
+      // Filter returning JSON
+      StaticJsonDocument<500> filter;
+      JsonObject filter_choices_0_message = filter["choices"][0].createNestedObject("message");
+      filter_choices_0_message["role"] = true;
+      filter_choices_0_message["content"] = true;
 
-    if (conn == 1) {
-      Serial.println();
-      Serial.println("Sending Parameters...");
-      //Request
-      client.println("POST https://api.openai.com/v1/chat/completions HTTP/1.1");
-      //Headers
-      client.print("Host: ");
-      client.println(server);
-      client.println("Content-Type: application/json");
-      client.print("Content-Length: ");
-      client.println(measureJson(doc));
-      client.print("Authorization: ");
-      client.println(openAI_Private_key);
-      client.println("Connection: Close");
-      client.println();
-      // Body
-      serializeJson(doc, client);
-      client.println();
+      StaticJsonDocument<2000> outputDoc;
+      DeserializationError error = deserializeJson(outputDoc, client, DeserializationOption::Filter(filter));
 
-      // Troubelshoot server reponse
-      // String line = client.readStringUntil('X'); //NOTE -> this will make wait for server response below execute - neesds chanded...
-      // Serial.print(line);
-
-      bool responseSuccess = true;
-      // bool oncer = false;
-      long startWaitTime = millis();
-      char thinkingMsg[] = "Thinking...";
-
-      // Wait for server response
-      while (client.available() == 0) {
-
-        if (millis() - startWaitTime > SERVER_RESPONSE_WAIT_TIME) {
-          Serial.println("!!---------SERVER_RESPONSE_WAIT_TIME exceeded -----");
-
-          responseSuccess = false;
-          break;
-        }
-
-        displayFace(5, thinkingMsg);
-      }
-
-      if (responseSuccess) {
-
-        client.find("\r\n\r\n");
-
-        // Filter returning JSON
-        StaticJsonDocument<500> filter;
-        JsonObject filter_choices_0_message = filter["choices"][0].createNestedObject("message");
-        filter_choices_0_message["role"] = true;
-        filter_choices_0_message["content"] = true;
-
-        StaticJsonDocument<2000> outputDoc;
-        DeserializationError error = deserializeJson(outputDoc, client, DeserializationOption::Filter(filter));
-
-        client.stop();
-
-        if (error) {
-          Serial.print("deserializeJson() failed: ");
-          Serial.println(error.c_str());
-          return;
-        }
-
-        messages[numMessages % MAX_MESSAGES].role = assistant;
-
-        // Clear char array
-        memset(messages[numMessages % MAX_MESSAGES].content, 0, sizeof messages[numMessages % MAX_MESSAGES].content);
-
-        strncpy(messages[numMessages % MAX_MESSAGES].content, outputDoc["choices"][0]["message"]["content"] | "...", MAX_MESSAGE_LENGTH);
-
-        responseLength = measureJson(outputDoc["choices"][0]["message"]["content"]);
-
-        Serial.println("-------------------Message Buffer--------------------");
-
-        for (int i = 0; i < MAX_MESSAGES; i++) {
-          Serial.print(i);
-          Serial.print(" - ");
-          Serial.println(messages[i].content);
-        }
-
-        Serial.print("\nSize of most recent reponse -> ");
-        Serial.println(responseLength);
-
-        messageEndIndex++;
-        messageEndIndex %= MAX_MESSAGES;
-        numMessages++;
-
-        state = DISPLAY_RESPONSE;
-
-      } else {
-        u8g2.clearBuffer();
-        u8g2.setCursor(0, FONT_HEIGHT * 2);
-        u8g2.print("Brain freeze, 1 sec");
-        u8g2.sendBuffer();
-
-        state = GET_REPONSE;
-      }
-
-    } else {
       client.stop();
-      Serial.println("");
-      Serial.println("Connection Failed");
-    }
 
-    Serial.println("<-------------------- END Get Reponse ----------------->");
-  }
-
-
-  /***************************************************************************/
-  /*********** Print User Input - Only change display for new input **********/
-  /***************************************************************************/
-  if (bufferChange && (state == GET_USER_INPUT || state == UPDATE_SYS_MSG)) {
-    Serial.println("Print User Input");
-    displayMsg(msgPtr->content, inputIndex);
-  }
-
-
-  /***************************************************************************/
-  /***** Print Response one word at a time **********************************/
-  /***************************************************************************/
-  // if (printResponse) {
-  if (state == DISPLAY_RESPONSE || state == REVIEW_REPONSE) {
-
-    Serial.println("---------------- printResponse Start----------------");
-
-    // Roll over
-    int responseIdx = (numMessages % MAX_MESSAGES) - 1 < 0
-                        ? MAX_MESSAGES - 1
-                        : numMessages % MAX_MESSAGES - 1;
-
-
-    // Calculate the start and end display indices for the response and for  "response scrubbing" (ie, when the user presses up and down arrows to look through response on OLED)
-
-    int startIdx;
-    int endIdx;
-
-    if (state == DISPLAY_RESPONSE) {
-
-      startIdx = 0;
-      endIdx = responseLength;
-
-      // Reset display offset every time a new message is revieced
-      displayOffset = 0;
-
-      Serial.print("responseLength -> ");
-      Serial.print(responseLength);
-      Serial.print("   startIdx -> ");
-      Serial.print(startIdx);
-      Serial.print("   endIdx -> ");
-      Serial.print(endIdx);
-      Serial.print("   state -> ");
-      Serial.println(state);
-
-    } else {
-
-      // How many spaces are needed to complete the last row
-      byte spacesToCompleteLastRow = MAX_CHAR_PER_OLED_ROW - responseLength % MAX_CHAR_PER_OLED_ROW;
-
-      // Count full rows of text in response
-      int fullRowsOfText = (responseLength + spacesToCompleteLastRow) / MAX_CHAR_PER_OLED_ROW;  // This should always be a whole number
-
-      // Calculate index at the end of the last row in response
-      int endFrameLastIdx = (fullRowsOfText * MAX_CHAR_PER_OLED_ROW);
-
-      // Calculate the first index in the "End of Respone 'Frame'"
-      int endFrameFirstIdx = endFrameLastIdx - MAX_CHARS_ON_SCREEN;
-
-      // Calculate display adjustment due to up/down arrow presses
-      int scrubAdj = displayOffset * MAX_CHAR_PER_OLED_ROW;
-
-      // Determine start/ end indices
-      startIdx = endFrameFirstIdx + scrubAdj;
-
-      if (startIdx < 0) {
-        startIdx = 0;
-        displayOffset++;
+      if (error) {
+        Serial.print("deserializeJson() failed: ");
+        Serial.println(error.c_str());
+        return;
       }
 
-      endIdx = startIdx + MAX_CHARS_ON_SCREEN - 1;
+      messages[numMessages % MAX_MESSAGES].role = assistant;
 
-      Serial.print("responseLength -> ");
-      Serial.print(responseLength);
-      Serial.print("   fullRowsOfText -> ");
-      Serial.print(fullRowsOfText);
-      Serial.print("   endFrameLastIdx -> ");
-      Serial.print(endFrameLastIdx);
-      Serial.print("   endFrameFirstIdx -> ");
-      Serial.print(endFrameFirstIdx);
-      Serial.print("   scrubAdj -> ");
-      Serial.print(scrubAdj);
-      Serial.print("   startIdx -> ");
-      Serial.print(startIdx);
-      Serial.print("   endIdx -> ");
-      Serial.print(endIdx);
-      Serial.print("   state -> ");
-      Serial.println(state);
+      // Clear char array
+      memset(messages[numMessages % MAX_MESSAGES].content, 0, sizeof messages[numMessages % MAX_MESSAGES].content);
+
+      strncpy(messages[numMessages % MAX_MESSAGES].content, outputDoc["choices"][0]["message"]["content"] | "...", MAX_MESSAGE_LENGTH);
+
+      responseLength = measureJson(outputDoc["choices"][0]["message"]["content"]);
+
+      Serial.println("-------------------Message Buffer--------------------");
+
+      for (int i = 0; i < MAX_MESSAGES; i++) {
+        Serial.print(i);
+        Serial.print(" - ");
+        Serial.println(messages[i].content);
+      }
+
+      Serial.print("\nSize of most recent reponse -> ");
+      Serial.println(responseLength);
+
+      messageEndIndex++;
+      messageEndIndex %= MAX_MESSAGES;
+      numMessages++;
+
+      state = DISPLAY_RESPONSE;
+
+    } else {
+      u8g2.clearBuffer();
+      u8g2.setCursor(0, FONT_HEIGHT * 2);
+      u8g2.print("Brain freeze, 1 sec");
+      u8g2.sendBuffer();
+
+      state = GET_REPONSE;
     }
 
-    displayMsg(messages[responseIdx].content, endIdx, startIdx, state == DISPLAY_RESPONSE ? true : false);
-
-    state = GET_USER_INPUT;
-
-    Serial.println("---------------- printResponse Stop ----------------");
+  } else {
+    client.stop();
+    Serial.println("");
+    Serial.println("Connection Failed");
   }
+
+  Serial.println("<-------------------- END Get Reponse ----------------->");
+}
+
+
+/***************************************************************************/
+/*********** Print User Input - Only change display for new input **********/
+/***************************************************************************/
+if (bufferChange && (state == GET_USER_INPUT || state == UPDATE_SYS_MSG)) {
+  Serial.println("Print User Input");
+  displayMsg(msgPtr->content, inputIndex);
+}
+
+
+/***************************************************************************/
+/***** Print Response one word at a time **********************************/
+/***************************************************************************/
+
+if (state == DISPLAY_RESPONSE || state == REVIEW_REPONSE) {
+
+  Serial.println("---------------- printResponse Start----------------");
+
+  // Roll over
+  int responseIdx = (numMessages % MAX_MESSAGES) - 1 < 0
+                      ? MAX_MESSAGES - 1
+                      : numMessages % MAX_MESSAGES - 1;
+
+
+  // Calculate the start and end display indices for the response and for  "response scrubbing" (ie, when the user presses up and down arrows to look through response on OLED)
+
+  int startIdx;
+  int endIdx;
+
+  if (state == DISPLAY_RESPONSE) {
+
+    startIdx = 0;
+    endIdx = responseLength;
+
+    // Reset display offset every time a new message is revieced
+    displayOffset = 0;
+
+    Serial.print("responseLength -> ");
+    Serial.print(responseLength);
+    Serial.print("   startIdx -> ");
+    Serial.print(startIdx);
+    Serial.print("   endIdx -> ");
+    Serial.print(endIdx);
+    Serial.print("   state -> ");
+    Serial.println(state);
+
+  } else {
+
+    // How many spaces are needed to complete the last row
+    byte spacesToCompleteLastRow = MAX_CHAR_PER_OLED_ROW - responseLength % MAX_CHAR_PER_OLED_ROW;
+
+    // Count full rows of text in response
+    int fullRowsOfText = (responseLength + spacesToCompleteLastRow) / MAX_CHAR_PER_OLED_ROW;  // This should always be a whole number
+
+    // Calculate index at the end of the last row in response
+    int endFrameLastIdx = (fullRowsOfText * MAX_CHAR_PER_OLED_ROW);
+
+    // Calculate the first index in the "End of Respone 'Frame'"
+    int endFrameFirstIdx = endFrameLastIdx - MAX_CHARS_ON_SCREEN;
+
+    // Calculate display adjustment due to up/down arrow presses
+    int scrubAdj = displayOffset * MAX_CHAR_PER_OLED_ROW;
+
+    // Determine start/ end indices
+    startIdx = endFrameFirstIdx + scrubAdj;
+
+    if (startIdx < 0) {
+      startIdx = 0;
+      displayOffset++;
+    }
+
+    endIdx = startIdx + MAX_CHARS_ON_SCREEN - 1;
+
+    Serial.print("responseLength -> ");
+    Serial.print(responseLength);
+    Serial.print("   fullRowsOfText -> ");
+    Serial.print(fullRowsOfText);
+    Serial.print("   endFrameLastIdx -> ");
+    Serial.print(endFrameLastIdx);
+    Serial.print("   endFrameFirstIdx -> ");
+    Serial.print(endFrameFirstIdx);
+    Serial.print("   scrubAdj -> ");
+    Serial.print(scrubAdj);
+    Serial.print("   startIdx -> ");
+    Serial.print(startIdx);
+    Serial.print("   endIdx -> ");
+    Serial.print(endIdx);
+    Serial.print("   state -> ");
+    Serial.println(state);
+  }
+
+  displayMsg(messages[responseIdx].content, endIdx, startIdx, state == DISPLAY_RESPONSE ? true : false);
+
+  state = GET_USER_INPUT;
+
+  Serial.println("---------------- printResponse Stop ----------------");
+}
 }
