@@ -11,6 +11,7 @@
 // USE THESE KEY DEFINE -> https://github.com/techpaul/PS2KeyAdvanced/blob/master/src/PS2KeyAdvanced.h
 #include <PS2KeyMap.h>
 
+#define DEBUG
 // Pins for PS/2 keyboard (through USB)
 #define DATAPIN 6  // (USB Data -)  (PS2 pin 1)
 #define IRQPIN 5   // (USB Data +)  (PS2 pin 5)
@@ -89,7 +90,7 @@ message noConnect = { assistant, "I'm sorry, I seem to be having a brain fart, l
 #define ALERT_MSG_LENGTH 70
 char SYSTEM_MSG_UPDATE_INITIATE_ALERT[ALERT_MSG_LENGTH] = "Enter new system message.";
 char SYSTEM_MSG_UPDATE_SUCCESS_ALERT[ALERT_MSG_LENGTH] = "System message updated! Start typing to ask next question.";
-char WELCOME_INSTRUCTIONS_ALERT[ALERT_MSG_LENGTH] = "Start typing to begin chat.";
+char WELCOME_INSTRUCTIONS_ALERT[ALERT_MSG_LENGTH] = "Start typing to chat";
 
 
 /*************************************************************************/
@@ -97,8 +98,8 @@ char WELCOME_INSTRUCTIONS_ALERT[ALERT_MSG_LENGTH] = "Start typing to begin chat.
 /*************************************************************************/
 
 // There are
-char inputBuffer[INPUT_BUFFER_LENGTH] = {};
-char chatBuffer[CHAT_BUFFER_LENGTH] = {};
+// char inputBuffer[INPUT_BUFFER_LENGTH] = {};
+// char chatBuffer[CHAT_BUFFER_LENGTH] = {};
 unsigned int responseLength;
 
 // OLED Display
@@ -253,7 +254,12 @@ void loop(void) {
   //Display Response Se
   static int displayOffset = 0;
 
-  // Users can write User messages, or Systems messages
+
+  /* 
+    The msgPtr is used for assigning user input to either:
+    -> the system message or,
+    -> the user message 
+  */
   struct message* msgPtr = (state == GET_USER_INPUT)
                              ? &messages[numMessages % MAX_MESSAGES]
                              : &systemMessage;
@@ -265,21 +271,9 @@ void loop(void) {
   // If input and buffer not full, assign characters to buffer
   if (keyboard.available() && (state == GET_USER_INPUT || state == UPDATE_SYS_MSG)) {
 
-
-    Serial.println("Start: User Input.");
-
     int key = keyboard.read();
     byte base = key & 0xff;
     byte remappedKey = keymap.remapKey(key);
-
-    /*
-    Serial.print("Key -> ");
-    Serial.println(key);
-    Serial.print("Base -> ");
-    Serial.println(base);
-    Serial.print("remappedKey -> ");
-    Serial.println(remappedKey);
-    */
 
     // Printable and Command Keys
     if (remappedKey > 0) {
@@ -289,15 +283,31 @@ void loop(void) {
       switch (base) {
 
         case PS2_KEY_ENTER:
+          Serial.println("KeyPressed-> Enter");
 
-          Serial.println("");
-          Serial.println("Enter Pressed");
+          /* 
+          Pressing the Enter/Return key has different effects depending on the state and whether 
+          the user has input any text yet or not.
 
+          state          |  Major Action
+          GET_USER_INPUT |  Change state to GET_RESPONSE, set msg role as 'user'
+          UPDATE_SYS_MSG |  Change state to GET_USER_INPUT, set msg role as 'sys'
+          */
+
+          // When user presses enter, change state to GET_RESPONSE
           if (state == GET_USER_INPUT) {
-            msgPtr->role = user;
-            numMessages++;
-            state = GET_REPONSE;
-            displayOffset = 0;
+
+            // Only submit if user has typed text
+            if (inputIndex != 0) {
+              msgPtr->role = user;
+              numMessages++;
+              inputIndex = 0;  // Reset Input Index for next response
+              state = GET_REPONSE;
+            } else {
+              /* User pressed enter with no text entered, this can happen easily if a user presses 
+              Enter/Return after the response is shown, thinking they need to clear the response text with enter. */
+              u8g2.clearDisplay();
+            }
 
             Serial.println("  User Message Submitted.");
             Serial.println("-------------------Message Buffer----------------------");
@@ -307,7 +317,7 @@ void loop(void) {
               Serial.print(" - ");
               Serial.println(messages[i].content);
             }
-          } else {
+          } else if (state == UPDATE_SYS_MSG) {
 
             msgPtr->role = sys;  // New system message has been added, message update role
             state = GET_USER_INPUT;
@@ -519,6 +529,7 @@ void loop(void) {
       // bool oncer = false;
       long startWaitTime = millis();
       char thinkingMsg[] = "Thinking...";
+
       // Wait for server response
       while (client.available() == 0) {
 
@@ -530,13 +541,6 @@ void loop(void) {
         }
 
         displayFace(5, thinkingMsg);
-        // if (!oncer) {
-        //   u8g2.clearBuffer();
-        //   u8g2.setCursor(0, FONT_HEIGHT * 2);
-        //   u8g2.print("Thinking...");
-        //   u8g2.sendBuffer();
-        //   oncer = true;
-        // }
       }
 
       if (responseSuccess) {
@@ -584,9 +588,7 @@ void loop(void) {
         messageEndIndex %= MAX_MESSAGES;
         numMessages++;
 
-        //state = GET_USER_INPUT;
         state = DISPLAY_RESPONSE;
-        //printResponse = true;
 
       } else {
         u8g2.clearBuffer();
@@ -674,7 +676,7 @@ void loop(void) {
 
       if (startIdx < 0) {
         startIdx = 0;
-        displayOffset++;  //
+        displayOffset++;
       }
 
       endIdx = startIdx + MAX_CHARS_ON_SCREEN - 1;
@@ -697,51 +699,7 @@ void loop(void) {
       Serial.println(state);
     }
 
-
-
-
-
-
-    // int lastRowStartIdx = (responseLength / MAX_CHAR_PER_OLED_ROW) * MAX_CHAR_PER_OLED_ROW;
-
-    // int firstVisibleRowStartIdx = lastRowStartIdx - MAX_CHARS_ON_SCREEN + MAX_CHAR_PER_OLED_ROW;
-
-    // Reset display offset every time a new message is revieced
-    // if (state == DISPLAY_RESPONSE) {
-    //   displayOffset = 0;
-    //   firstVisibleRowStartIdx = 0;
-    // }
-
-    // int startDisplayIdx = firstVisibleRowStartIdx + (MAX_CHAR_PER_OLED_ROW * displayOffset);
-
-    // Serial.print("   BEFORE startDisplayIdx -> ");
-    // Serial.print(startDisplayIdx);
-
-    // if (startDisplayIdx < 0) {
-    //   startDisplayIdx = 0;
-    // }
-
-    // Display entire message first time assistant responds
-    // int endIndex = (state == DISPLAY_RESPONSE)
-    //                  ? responseLength
-    //                  : MAX_CHARS_ON_SCREEN - 1;
-
-
-    // Serial.print("responseLength -> ");
-    // Serial.print(responseLength);
-    // Serial.print("   lastRowStartIdx -> ");
-    // Serial.print(lastRowStartIdx);
-    // Serial.print("   firstVisibleRowStartIdx -> ");
-    // Serial.print(firstVisibleRowStartIdx);
-    // Serial.print("   startDisplayIdx -> ");
-    // Serial.print(startDisplayIdx);
-    // Serial.print("   endIDX -> ");
-    // Serial.print(endIndex);
-    // Serial.print("   state -> ");
-    // Serial.println(state);
-
     displayMsg(messages[responseIdx].content, endIdx, startIdx, state == DISPLAY_RESPONSE ? true : false);
-    // displayMsg(messages[responseIdx].content, endIndex, startDisplayIdx, state == DISPLAY_RESPONSE ? true : false);
 
     state = GET_USER_INPUT;
 
