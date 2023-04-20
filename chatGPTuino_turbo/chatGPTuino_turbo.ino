@@ -252,7 +252,6 @@ void loop(void) {
 
   // Track input buffer index
   static int inputIndex = 0;
-  static boolean inputBufferFull = false;
   static boolean clearInput = false;
 
   //Display Response Se
@@ -346,14 +345,12 @@ void loop(void) {
 
           inputIndex = inputIndex > 0 ? inputIndex - 1 : 0;
           msgPtr->content[inputIndex] = ' ';
-          inputBufferFull = false;
           break;
 
         case PS2_KEY_TAB:
         case PS2_KEY_SPACE:
           Serial.print("KeyPressed-> Space/Tab");
 
-          //if (!inputBufferFull) {
           if (inputIndex < MAX_MESSAGE_LENGTH) {
             msgPtr->content[inputIndex] = ' ';
             inputIndex++;
@@ -410,7 +407,6 @@ void loop(void) {
             memset(msgPtr->content, 0, sizeof msgPtr->content);
 
             inputIndex = 0;           // Return index to start
-            inputBufferFull = false;  // Handles sitution where
             clearInput = false;
           }
 
