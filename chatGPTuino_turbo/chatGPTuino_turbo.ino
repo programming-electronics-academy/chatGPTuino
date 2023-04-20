@@ -63,7 +63,11 @@ enum states { GET_USER_INPUT,
 
 #define MAX_TOKENS 50      // THE ALL IMPORTANT NUMBER!
 #define CHARS_PER_TOKEN 6  // Each token equates to roughly 4 chars, but does not include spaces
-#define MAX_MESSAGE_LENGTH (MAX_TOKENS * CHARS_PER_TOKEN)
+
+/* CHANGE BACK AFTER TESTING */
+#define MAX_MESSAGE_LENGTH 100  //(MAX_TOKENS * CHARS_PER_TOKEN)
+/* CHANGE BACK AFTER TESTING */
+
 #define MAX_MESSAGES 5                   // Everytime you send a message, it must inlcude all previous messages in order to respond with context
 #define SERVER_RESPONSE_WAIT_TIME 15000  // How long to wait for a server response
 
@@ -250,10 +254,10 @@ void loop(void) {
   static int inputIndex = 0;
   static boolean inputBufferFull = false;
   static boolean clearInput = false;
-  
+
   //Display Response Se
   static int displayOffset = 0;
-  
+
   boolean bufferChange = false;
 
   /* 
@@ -349,10 +353,14 @@ void loop(void) {
         case PS2_KEY_SPACE:
           Serial.print("KeyPressed-> Space/Tab");
 
-          if (!inputBufferFull) {
+          //if (!inputBufferFull) {
+          if (inputIndex < MAX_MESSAGE_LENGTH) {
             msgPtr->content[inputIndex] = ' ';
             inputIndex++;
           }
+
+          Serial.print("  | Input Index->");
+          Serial.println(inputIndex);
           break;
 
         case PS2_KEY_ESC:
@@ -406,21 +414,20 @@ void loop(void) {
             clearInput = false;
           }
 
-          // Add character to current message
-          if (!inputBufferFull) {
+          if (inputIndex < MAX_MESSAGE_LENGTH - 1) {
 
             Serial.print(char(remappedKey));
-
             msgPtr->content[inputIndex] = char(remappedKey);
             inputIndex++;
-          }
+            Serial.print("  | Input Index->");
+            Serial.println(inputIndex);
 
-          //If you have reached end of input buffer, display a <
-          if (inputIndex >= MAX_MESSAGE_LENGTH && !inputBufferFull) {
-            bufferChange = true;
-            inputBufferFull = true;
+          } else if (inputIndex == MAX_MESSAGE_LENGTH - 1) {
+            Serial.print("  | You've Reached the end of Input Index->");
+            Serial.println(inputIndex);
 
-            msgPtr->content[MAX_MESSAGE_LENGTH - 1] = '<';
+            msgPtr->content[inputIndex] = '<';
+            inputIndex++;
           }
       }
     }
@@ -605,7 +612,7 @@ void loop(void) {
   /*********** Print User Input - Only change display for new input **********/
   /***************************************************************************/
   if (bufferChange && (state == GET_USER_INPUT || state == UPDATE_SYS_MSG)) {
-    Serial.println("Print User Input");
+    //Serial.println("Print User Input");
     displayMsg(msgPtr->content, inputIndex);
   }
 
