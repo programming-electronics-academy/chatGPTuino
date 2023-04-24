@@ -1,118 +1,182 @@
 #include <Arduino.h>
-#include <U8g2lib.h>
-#include <WiFi.h>
-// #include <HTTPClient.h>
-#include <WiFiClientSecure.h>
-#include "credentials.h"
-#include "bitmaps.h"
-#include <ArduinoJson.h>
+#include <U8g2lib.h>  // OLED
 
-#include <PS2KeyAdvanced.h>
-// USE THESE KEY DEFINE -> https://github.com/techpaul/PS2KeyAdvanced/blob/master/src/PS2KeyAdvanced.h
-#include <PS2KeyMap.h>
+#include <WiFi.h>              // ESP32
+#include <WiFiClientSecure.h>  // ESP32
+#include <ArduinoJson.h>       // Handle JSON formatting for API calls
+
+#include <PS2KeyAdvanced.h>  // Keyboard input
+#include <PS2KeyMap.h>       // Keyboard input mapping
+// If you want to add more special key functionality, use these key constants -> https://github.com/techpaul/PS2KeyAdvanced/blob/master/src/PS2KeyAdvanced.h
+
+#include "credentials.h"  // Network name, password, and private API key
+#include "bitmaps.h"      // Images shown on screen
 
 #define DEBUG
+
 // Pins for PS/2 keyboard (through USB)
 #define DATAPIN 6  // (USB Data -)  (PS2 pin 1)
 #define IRQPIN 5   // (USB Data +)  (PS2 pin 5)
 
-PS2KeyAdvanced keyboard;
-PS2KeyMap keymap;
-
-#ifdef U8X8_HAVE_HW_SPI
-#include <SPI.h>
-#endif
-#ifdef U8X8_HAVE_HW_I2C
-#include <Wire.h>
-#endif
-
-// Open AI endpoint
+/*************** Open AI endpoint and connection details ****************/
 const char* openAPIendPoint = "https://api.openai.com/v1/chat/completions";
 const char* server = "api.openai.com";
+#define PORT 443                               // The port you'll connect to on the server - this is standard.
+#define SERVER_RESPONSE_WAIT_TIME (15 * 1000)  // How long to wait for a server response (seconds * 1000)
 
-const int port = 443;
+// OpenAI API endpoint root certificate used to ensure response is actually from OpenAPI
+const char* rootCACertificate =
+  "-----BEGIN CERTIFICATE-----\n"
+  "MIIDdzCCAl+gAwIBAgIEAgAAuTANBgkqhkiG9w0BAQUFADBaMQswCQYDVQQGEwJJ\n"
+  "RTESMBAGA1UEChMJQmFsdGltb3JlMRMwEQYDVQQLEwpDeWJlclRydXN0MSIwIAYD\n"
+  "VQQDExlCYWx0aW1vcmUgQ3liZXJUcnVzdCBSb290MB4XDTAwMDUxMjE4NDYwMFoX\n"
+  "DTI1MDUxMjIzNTkwMFowWjELMAkGA1UEBhMCSUUxEjAQBgNVBAoTCUJhbHRpbW9y\n"
+  "ZTETMBEGA1UECxMKQ3liZXJUcnVzdDEiMCAGA1UEAxMZQmFsdGltb3JlIEN5YmVy\n"
+  "VHJ1c3QgUm9vdDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKMEuyKr\n"
+  "mD1X6CZymrV51Cni4eiVgLGw41uOKymaZN+hXe2wCQVt2yguzmKiYv60iNoS6zjr\n"
+  "IZ3AQSsBUnuId9Mcj8e6uYi1agnnc+gRQKfRzMpijS3ljwumUNKoUMMo6vWrJYeK\n"
+  "mpYcqWe4PwzV9/lSEy/CG9VwcPCPwBLKBsua4dnKM3p31vjsufFoREJIE9LAwqSu\n"
+  "XmD+tqYF/LTdB1kC1FkYmGP1pWPgkAx9XbIGevOF6uvUA65ehD5f/xXtabz5OTZy\n"
+  "dc93Uk3zyZAsuT3lySNTPx8kmCFcB5kpvcY67Oduhjprl3RjM71oGDHweI12v/ye\n"
+  "jl0qhqdNkNwnGjkCAwEAAaNFMEMwHQYDVR0OBBYEFOWdWTCCR1jMrPoIVDaGezq1\n"
+  "BE3wMBIGA1UdEwEB/wQIMAYBAf8CAQMwDgYDVR0PAQH/BAQDAgEGMA0GCSqGSIb3\n"
+  "DQEBBQUAA4IBAQCFDF2O5G9RaEIFoN27TyclhAO992T9Ldcw46QQF+vaKSm2eT92\n"
+  "9hkTI7gQCvlYpNRhcL0EYWoSihfVCr3FvDB81ukMJY2GQE/szKN+OMY3EU/t3Wgx\n"
+  "jkzSswF07r51XgdIGn9w/xZchMB5hbgF/X++ZRGjD8ACtPhSNzkE1akxehi/oCr0\n"
+  "Epn3o0WC4zxe9Z2etciefC7IpJ5OCBRLbf1wbWsaY71k5h+3zvDyny67G7fyUIhz\n"
+  "ksLi4xaNmjICq44Y3ekQEe5+NauQrz4wlHrQMz2nZQ/1/I6eYs9HRCwBXbsdtTLS\n"
+  "R9I4LtD+gdwyah617jzV/OeBHRnDJELqYzmp\n"
+  "-----END CERTIFICATE-----\n";
 
-enum states { GET_USER_INPUT,
-              GET_REPONSE,
-              DISPLAY_RESPONSE,
-              REVIEW_REPONSE,
-              CLEAR_INPUT,
-              UPDATE_SYS_MSG };
-
-// Display settings
-#define LINE_HEIGHT 10
+/*************** Display settings ****************/
 #define SCREEN_HEIGHT 64
 #define SCREEN_WIDTH 128
-#define FONT_WIDTH 6
-#define FONT_HEIGHT 12
-#define CHAT_DISPLAY_POS_START FONT_HEIGHT * 2
-#define INPUT_BUFFER_LENGTH 40
-#define MAX_CHAT_LINES 60  // This needs better estimated
-#define CURSOR_START_X_AXIS 0
-#define CURSOR_START_Y_AXIS -2
 
-#define MAX_CHAR_PER_OLED_ROW 20  //Update to calculate for different screen sizes based on font size
-#define MAX_OLED_ROWS 5           //Update to calculate for different screen sizes based on font size
+/*
+  Font selection is made in setup().  
+  For the most part, FONT_WIDTH and FONT_HEIGHT can match the designated font size.
+  However, these can be tuned to "scrunch in" more viewable lines for your given OLED size. */
+#define FONT_WIDTH 6
+#define FONT_HEIGHT 13
+
+/*
+  These constants are used extensively in the displaying of text input and response.
+  Adjust at your own peril. */
+#define MAX_CHAR_PER_OLED_ROW (SCREEN_WIDTH / FONT_WIDTH)
+#define MAX_OLED_ROWS (SCREEN_HEIGHT / FONT_HEIGHT)
 #define MAX_CHARS_ON_SCREEN (MAX_CHAR_PER_OLED_ROW * MAX_OLED_ROWS)
 
-// These reference may be useful for understanding tokens and message size
-// https://platform.openai.com/docs/api-reference/chat/create#chat/create-max_tokens
-// https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them
-// https://platform.openai.com/docs/guides/chat/introduction
-//https://platform.openai.com/tokenizer
+/*************** Alert Messages ***************
+  Messages dispayed to user for informational purposes. */
+#define ALERT_MSG_LENGTH 70
+const char SYSTEM_MSG_UPDATE_INITIATE_ALERT[ALERT_MSG_LENGTH] = "Enter new system message.";
+const char SYSTEM_MSG_UPDATE_SUCCESS_ALERT[ALERT_MSG_LENGTH] = "System message updated! Start typing to ask next question.";
+const char WELCOME_INSTRUCTIONS_ALERT[ALERT_MSG_LENGTH] = "Start typing to chat.";
 
-#define MAX_TOKENS 50      // THE ALL IMPORTANT NUMBER!
-#define CHARS_PER_TOKEN 6  // Each token equates to roughly 4 chars, but does not include spaces
+/******** STEVE QUESTION 1 ********
+  I made the above character arrays constant, because they are never intended to change.
+  However, the display function (displayMsg()) that handles displaying ALL messages (Not just these const alert messages)
+  does not take a const char array[], but just a char array[].  
+  
+  So what I have done is everytime I pass these above arrays into the displayMsg function I cast them
+  as (char *)SYSTEM_MSG_ALERT.  I'm not sure if this is bad practice or not. */
 
-/* CHANGE BACK AFTER TESTING */
-#define MAX_MESSAGE_LENGTH 100  //(MAX_TOKENS * CHARS_PER_TOKEN)
-/* CHANGE BACK AFTER TESTING */
+/*************** System States **************
+  The different states the program can be in. */
+enum states { GET_USER_INPUT,    // When a user is typing, diplay input on OLED
+              GET_REPONSE,       // Send a POST call to the Open AI API with user input
+              DISPLAY_RESPONSE,  // Display the assistant response on the OLED
+              REVIEW_REPONSE,    // Scroll up and down the assistant response
+              UPDATE_SYS_MSG };  // User input to change the system message
 
-#define MAX_MESSAGES 5                   // Everytime you send a message, it must inlcude all previous messages in order to respond with context
-#define SERVER_RESPONSE_WAIT_TIME 15000  // How long to wait for a server response
+/*************** Roles **************
+  The current chatGTP API format has 3 distinct role types for each message.
 
-const int CHAT_BUFFER_LENGTH = MAX_CHAR_PER_OLED_ROW * MAX_CHAT_LINES;
+  "system" role is a message that can be used to "steer" the response of the model
+  "user" role is assigned to messages sent from the user to the model
+  "assistant" role is assigned to messages sent from the model to the user
 
+  These roles are sent as a character string in the API call. */
 enum roles { sys,  //system
              user,
              assistant };
 
+const char roleNames[3][10] = { "system", "user", "assistant" };
 
-char roleNames[3][10] = { "system", "user", "assistant" };
+/****** Tokens *******
+  A token in the OpenAI API is roughly equivalent to 3/4 of a word.  Tokens are extremely important, because they are used to measure billing.
+  You will be billed for the number of token you receive from Open AI *AND* the number you send.
 
-// This is a HUGE chunk o' memory we need to allocate for all time
-struct message {
-  enum roles role;
-  char content[MAX_MESSAGE_LENGTH];
-} messages[MAX_MESSAGES];
-
-message systemMessage = { sys, "Respond as if you were a pirate." };
-message noConnect = { assistant, "I'm sorry, I seem to be having a brain fart, let me think on that again." };
-
-
-
-#define ALERT_MSG_LENGTH 70
-char SYSTEM_MSG_UPDATE_INITIATE_ALERT[ALERT_MSG_LENGTH] = "Enter new system message.";
-char SYSTEM_MSG_UPDATE_SUCCESS_ALERT[ALERT_MSG_LENGTH] = "System message updated! Start typing to ask next question.";
-char WELCOME_INSTRUCTIONS_ALERT[ALERT_MSG_LENGTH] = "Start typing to chat";
-
+  When you make an API call to Open AI, the number of tokens you request is part of the request.
+  Each values below can dramatically modulate the cost of communication as well as the storage space used to store each message. 
+  
+  These reference may be useful for understanding tokens and message size.
+  https://platform.openai.com/docs/api-reference/chat/create#chat/create-max_tokens
+  https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them
+  https://platform.openai.com/docs/guides/chat/introduction
+  https://platform.openai.com/tokenizer */
+#define MAX_TOKENS 50      // Each token is roughly 3/4 of a word.  The longer this bigger this number, the longer the potenial response.
+#define CHARS_PER_TOKEN 6  // Each token equates to roughly 4 chars, but does not include spaces, the number 6 was chosen to act as a safety buffer incase a response is above average length.
+#define MAX_MESSAGE_LENGTH (MAX_TOKENS * CHARS_PER_TOKEN)
+#define MAX_MESSAGES 10  // Everytime you send a message, it must inlcude all previous messages in order to respond with context, this limits the depth of your chats.
 
 /*************************************************************************/
 /*******  GLOBALS  ******************************************************/
 /*************************************************************************/
 
-// There are
-// char inputBuffer[INPUT_BUFFER_LENGTH] = {};
-// char chatBuffer[CHAT_BUFFER_LENGTH] = {};
+/*
+  The "chat" format used by the OpenAI API is an array of {role, content} pairs.
+  I am using the singular term "message" to refer to one of these pairs.
+
+  Everytime you communicate with the model, you must send all your 
+  previous messages, as the model messages do not persist from one 
+  API call to the next.  To say this again, as it is key... 
+  
+  If you want the model responses to be couched in the context of previous
+  messages, you must include all the messages from the user and from the assistant
+  in chronological order (oldest to newest).
+ 
+  To manage all these messages, we implement the following:
+  1) A message struct for handling each {role, content} pair
+  2) A messages array, to hold each message.
+
+  The messages array is treated as a circular buffer.  When the number of messages exceeds
+  the length of the array, the newest message overwrites the oldest messaage.  
+  
+  This limits the "depth" of backward context that can be maintained with the chatbot.
+  If you increase MAX_MESSAGES you'll increase this depth, and also increase total cost, 
+  as well as increase memory allocated for the messages array.
+
+  The messages array is updated by every state, and is used extensively throughout the program.
+*/
+struct message {
+  enum roles role;
+  char content[MAX_MESSAGE_LENGTH];
+} messages[MAX_MESSAGES];
+
+/* As mentioned ealier, the system message is a special message meant to steer the models response.
+In the current configuation, the system message is NOT stored in the messages array, but rather inserted
+into the JSON packet during the API call, prior to the last message sent.
+
+The system message is meant to be used for fun, and to configure the kind of response you want from the chatBot. */
+message systemMessage = { sys, "Respond as if you were a pirate." };
+
+
+message noConnect = { assistant, "I'm sorry, I seem to be having a brain fart, let me think on that again." };
+
+// The number of characters in the assistant response
 unsigned int responseLength;
 
 // OLED Display
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* clock=*/SCL, /* data=*/SDA, /* reset=*/U8X8_PIN_NONE);  // High speed I2C
 
+/*************** Keyboard Input ****************/
+PS2KeyAdvanced keyboard;
+PS2KeyMap keymap;
+
 /*************************************************************************/
 /*******  FUNCTIONS ******************************************************/
 /*************************************************************************/
-
 
 /*
  * Function:  displayMsg 
@@ -142,7 +206,7 @@ void displayMsg(char msg[], int endIdx, int startIdx = 0, bool setDelay = false)
     // Delay at spaces
     if ((msg[i] == ' ' && setDelay)) {
 
-      if (firstTime || lineNum == 5) {
+      if (firstTime || lineNum == MAX_OLED_ROWS) {
         delay(300);
         u8g2.sendBuffer();
       }
@@ -206,6 +270,7 @@ void setup(void) {
   Serial.println("ChatGPTuino");
   Serial.println("Setup Started...");
 
+
   // Keyboard setup
   keyboard.begin(DATAPIN, IRQPIN);
   keyboard.setNoBreak(1);   // No break codes for keys (when key released)
@@ -229,7 +294,7 @@ void setup(void) {
 
   char welcomeMessage[] = "Hi. I'm chatGPTuino.";
   displayFace(10, welcomeMessage);
-  displayMsg(WELCOME_INSTRUCTIONS_ALERT, ALERT_MSG_LENGTH);
+  displayMsg((char*)WELCOME_INSTRUCTIONS_ALERT, ALERT_MSG_LENGTH);
 
   Serial.println("...Setup Ended");
 }
@@ -331,7 +396,7 @@ void loop(void) {
 
             msgPtr->role = sys;  // New system message has been added, update the message role
             state = GET_USER_INPUT;
-            displayMsg(SYSTEM_MSG_UPDATE_SUCCESS_ALERT, ALERT_MSG_LENGTH);
+            displayMsg((char*)SYSTEM_MSG_UPDATE_SUCCESS_ALERT, ALERT_MSG_LENGTH);
             bufferChange = false;  // Do not update display
             Serial.println("  System Message Updated.");
           }
@@ -351,7 +416,7 @@ void loop(void) {
         case PS2_KEY_SPACE:
           Serial.print("KeyPressed-> Space/Tab");
 
-          if (inputIndex < MAX_MESSAGE_LENGTH) {
+          if (inputIndex < MAX_MESSAGE_LENGTH - 1) {
             msgPtr->content[inputIndex] = ' ';
             inputIndex++;
           }
@@ -362,7 +427,7 @@ void loop(void) {
 
         case PS2_KEY_ESC:
           Serial.println("KeyPressed-> Esc");
-          displayMsg(SYSTEM_MSG_UPDATE_INITIATE_ALERT, ALERT_MSG_LENGTH);
+          displayMsg((char*)SYSTEM_MSG_UPDATE_INITIATE_ALERT, ALERT_MSG_LENGTH);
           state = UPDATE_SYS_MSG;
           inputIndex = 0;
           bufferChange = false;  // Do not update display
@@ -406,7 +471,7 @@ void loop(void) {
 
             memset(msgPtr->content, 0, sizeof msgPtr->content);
 
-            inputIndex = 0;           // Return index to start
+            inputIndex = 0;  // Return index to start
             clearInput = false;
           }
 
@@ -495,7 +560,7 @@ void loop(void) {
     serializeJsonPretty(doc, Serial);
     Serial.println("");
 
-    int conn = client.connect(server, port);
+    int conn = client.connect(server, PORT);
 
     delay(1000);
 
@@ -628,7 +693,6 @@ void loop(void) {
 
 
     // Calculate the start and end display indices for the response and for  "response scrubbing" (ie, when the user presses up and down arrows to look through response on OLED)
-
     int startIdx;
     int endIdx;
 
