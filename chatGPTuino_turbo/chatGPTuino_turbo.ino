@@ -525,11 +525,11 @@ void loop(void) {
 
           // Arrow keys have no effect if user has input text
           if (inputIdx == 0) {
-  
-            displayOffset++; // Move the display index up/down one line
 
-            if (displayOffset > 0) {
-              displayOffset = 0;
+            displayOffset++;  // Move the display index up/down one line
+
+            if (displayOffset > 0) {  //  displayOffset of 0 represents the top of the screen,
+              displayOffset = 0;      //  so you can't move about that.
             }
 
             state = REVIEW_REPONSE;
@@ -544,12 +544,13 @@ void loop(void) {
 
           if (clearInput) {
 
-            Serial.print("  | Message cleared.");
-
+            /* Since we are using the messages array as a cirular buffer,
+            we'll clear all the previous data in the message content pointed to by msgPtr. */
             memset(msgPtr->content, 0, sizeof msgPtr->content);
+            inputIdx = 0;        // Return index to 0 for new message
+            clearInput = false;  // Reset flag
 
-            inputIdx = 0;  // Return index to start
-            clearInput = false;
+            Serial.print("  | Message cleared.");
           }
 
           if (inputIdx < MAX_MESSAGE_LENGTH - 1) {
