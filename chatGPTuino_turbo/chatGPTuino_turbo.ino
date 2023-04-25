@@ -72,6 +72,11 @@ const char* rootCACertificate =
 const char SYSTEM_MSG_UPDATE_INITIATE_ALERT[ALERT_MSG_LENGTH] = "Enter new system message.";
 const char SYSTEM_MSG_UPDATE_SUCCESS_ALERT[ALERT_MSG_LENGTH] = "System message updated! Start typing to ask next question.";
 const char WELCOME_INSTRUCTIONS_ALERT[ALERT_MSG_LENGTH] = "Start typing to chat.";
+const char BOOT_SCREEN_ALERT[ALERT_MSG_LENGTH] = "Hi. I'm chatGPTuino.";
+const char WAITING_FOR_API_RESPONSE_ALERT[ALERT_MSG_LENGTH] = "Thinking...";
+
+#define BOOT_ALERT_INTERVAL (3 * 1000)                // Milliseconds to show boot message
+#define WAITING_FOR_API_RESPONSE_INTERVAL (1 * 1000)  // Milliseconds to show boot message
 
 /******** STEVE QUESTION 1 ********
   I made the above character arrays constant, because they are never intended to change.
@@ -264,17 +269,30 @@ void displayMsg(char msg[], int endIdx, int startIdx = 0, bool setDelay = false)
 /*
  * Function:  displayFace
  * -------------------------
- * Displays face and message on screen.
+ * Displays 3 faces repeatly and randomly, as well as a message on screen.  
+ * Very amateur animation for blinking and mouth movement.
+ * 
+ * displayTime: Roughly how long the animation will last. 
+ *              This does not account for code execution time, 
+ *              and is an underestimate of total run time, but close enough. 
+ * displayMessage:  What message to show below the face.
+ * delayInterval:   Adjust the "frame rate" of the animation.
+ *
+ * returns: void
  */
-void displayFace(int iterations, char displayMessage[]) {
+void displayFace(long displayTime, const char displayMessage[], long delayInterval = 100) {
 
-  int bitmapIndex;
+  long iterations = displayTime / delayInterval;
+  int bitmapIndex;       // The bitmap to display
+  int marginTop = -10;   // How many pixels from top to display bitmap (must be negative)
+  int marginBottom = 5;  // How many pixels from bottom to display text
+
+  randomSeed(analogRead(0));
 
   for (int i = 0; i <= iterations; i++) {
 
-    randomSeed(analogRead(0));
-    int randomBlink = random(1, iterations);
-    if (i % randomBlink == 0) {
+    int randomBlink = random(1, iterations);  // Pick a random number
+    if (i % randomBlink == 0) {               // blink
       bitmapIndex = eyes_closed;
     } else if (i % 2 == 0) {
       bitmapIndex = eyes_open_2;
@@ -283,14 +301,12 @@ void displayFace(int iterations, char displayMessage[]) {
     }
 
     u8g2.clearBuffer();
-    u8g2.drawXBM(0, -10, SCREEN_WIDTH, SCREEN_HEIGHT, bitmaps[bitmapIndex]);
+    u8g2.drawXBM(0, marginTop, SCREEN_WIDTH, SCREEN_HEIGHT, bitmaps[bitmapIndex]);  // Put face in buffer
+    u8g2.setCursor(0, SCREEN_HEIGHT - marginBottom);
+    u8g2.print(displayMessage);  // Put text in buffer
+    u8g2.sendBuffer();           // Display buffer
 
-    u8g2.setCursor(0, SCREEN_HEIGHT - 5);
-    u8g2.print(displayMessage);
-
-    u8g2.sendBuffer();
-
-    delay(100);
+    delay(delayInterval);
   }
 }
 
@@ -301,16 +317,16 @@ void displayFace(int iterations, char displayMessage[]) {
 void setup(void) {
 
   Serial.begin(9600);
-  delay(1000);
-  Serial.println("ChatGPTuino");
-  Serial.println("Setup Started...");
 
+  delay(3000);
+  Serial.println("ChatGPTuino.  A terminal for interacting with OpenAI.");
+  Serial.println("Setup Started...");
 
   // Keyboard setup
   keyboard.begin(DATAPIN, IRQPIN);
-  keyboard.setNoBreak(1);   // No break codes for keys (when key released)
-  keyboard.setNoRepeat(1);  // Don't repeat shift ctrl etc
-  keymap.selectMap((char*)"US");
+  keyboard.setNoBreak(1);         // No break codes for keys (when key released)
+  keyboard.setNoRepeat(1);        // Don't repeat shift, ctrl, etc
+  keymap.selectMap((char*)"US");  // Select the country for your type of keyboard (only tested on US)
 
   // WiFi Setup
   WiFi.begin(ssid, password);
@@ -327,8 +343,8 @@ void setup(void) {
   u8g2.begin();
   u8g2.setFont(u8g2_font_6x13_tf);  //https://github.com/olikraus/u8g2/wiki/fntlist12
 
-  char welcomeMessage[] = "Hi. I'm chatGPTuino.";
-  displayFace(10, welcomeMessage);
+  // Show a face and message, and then instructions.
+  displayFace(BOOT_ALERT_INTERVAL, BOOT_SCREEN_ALERT);
   displayMsg((char*)WELCOME_INSTRUCTIONS_ALERT, ALERT_MSG_LENGTH);
 
   Serial.println("...Setup Ended");
@@ -343,51 +359,61 @@ void loop(void) {
   // The state will determine the flow of the program
   static states state = GET_USER_INPUT;
 
-  /*
-    Count the total number of messages between the user and the agent.
-    This does not include the systemt message.
-    We will use this message count to determine our index inside the messages array.
-  */
-  static int numMessages = 0;
+  /*  This will count the total number of messages between the user and the agent.
+  This does not include the system message. We will use this message count 
+  to determine our index inside the messages array. */
+  static int msgCount = 0;
 
-  // Track input buffer index
-  static int inputIndex = 0;
+  /* The msgPtr is used for assigning keyboard input text to either:
+    -> the System Message or,
+    -> a User Message in the messages array
+  It is assigned based on the current state.
+  The msgPtr is also used for displaying the user keyboard input text. */
+  struct message* msgPtr = (state == GET_USER_INPUT)
+                             ? &messages[msgCount % MAX_MESSAGES]  // This implements the circular nature of the messages array
+                             : &systemMessage;
+
+  /****** User Input Control *******/
+
+  /* Every time a user types a character, we increment inputIdx. 
+  If user presses backspace, we decrement inputIdx. */
+  static int inputIdx = 0;
+
+  // A flag to clear the display buffer and reset inputIdx to 0
   static boolean clearInput = false;
 
-  //Display Response Se
-  static int displayOffset = 0;
-
+  /* A flag to used to ensure user input is displayed only when the 
+  display buffer has been meaningfully changed */
   boolean bufferChange = false;
 
-  /* 
-    The msgPtr is used for assigning keyboard input text to either:
-    -> the system message or,
-    -> a user message in the messages array
-    It is assigned based on the current state.
+  /******* Response Display Control *******/
 
-    The msgPtr is also used for displaying the user keyboard input text.
-  */
-  struct message* msgPtr = (state == GET_USER_INPUT)
-                             ? &messages[numMessages % MAX_MESSAGES]
-                             : &systemMessage;
+  /* When a user presses up and down arrows, this adjusts the index  
+   of the message content to show */
+  static int displayOffset = 0;
+
 
   /***************************************************************************/
   /*********** GET USER INPUT ************************************************/
   /***************************************************************************/
 
-  // If input and buffer not full, assign characters to buffer
+  // If the user has pressed a key during an input/update state
   if (keyboard.available() && (state == GET_USER_INPUT || state == UPDATE_SYS_MSG)) {
 
+    /* This is a 16 bit value, the 8 MSB are individual flags for functional keys (like shift, control, etc)
+    While the 8 LSB make up a unique code for the specific key that was pressed. */
     int key = keyboard.read();
-    byte base = key & 0xff;
-    byte remappedKey = keymap.remapKey(key);
+    byte base = key & 0xff;                   // This is the 8 bit unique code for a character
+    byte remappedKey = keymap.remapKey(key);  // remapKey returns a 0 if the key is not standard ASCII/UTF-8 code.
+                                              // This is used to filter out non-display character keys, like Fn, Alt, etc
 
-    //Check if up or down arrow pressed
+    // Check if up or down arrow pressed
     boolean arrowKeyPressed = (base == PS2_KEY_UP_ARROW) || (base == PS2_KEY_DN_ARROW);
 
     // Printable and Select Command Keys
     if (remappedKey > 0 || arrowKeyPressed) {
 
+      // Signals the downstream print function to re-display buffer
       bufferChange = true;
 
       switch (base) {
@@ -395,100 +421,112 @@ void loop(void) {
         case PS2_KEY_ENTER:
           Serial.println("KeyPressed-> Enter");
 
-          /* 
-          Pressing the Enter/Return key has different effects depending on the state and whether 
+          /* Pressing the Enter/Return key has different effects depending on the state and whether 
           the user has input any text yet or not.
 
           state          |  Major Action
           GET_USER_INPUT |  Change state to GET_RESPONSE, set msg role as 'user'
-          UPDATE_SYS_MSG |  Change state to GET_USER_INPUT, set msg role as 'sys'
-          */
-
-          // When user presses enter, change state to GET_RESPONSE
+          UPDATE_SYS_MSG |  Change state to GET_USER_INPUT, set msg role as 'sys' */
           if (state == GET_USER_INPUT) {
 
-            // Only submit if user has typed text
-            if (inputIndex != 0) {
+            // Only change state if user has typed text
+            if (inputIdx != 0) {
               msgPtr->role = user;
-              numMessages++;
-              inputIndex = 0;  // Reset Input Index for next response
+              msgCount++;
+              inputIdx = 0;  // Reset Input Index for next response
               state = GET_REPONSE;
             } else {
               /* User pressed enter with no text entered, this can happen easily if a user presses 
-              Enter/Return after the response is shown, thinking they need to clear the response text with enter. */
+              Enter/Return after the response is shown, thinking they need to clear the display with enter. */
               u8g2.clearDisplay();
             }
 
-            Serial.println("  User Message Submitted.");
-            Serial.println("-------------------Message Buffer----------------------");
+            Serial.println("  | User message submitted");
+
+#ifdef DEBGUB
+            Serial.println("------------------- Message Buffer ----------------------");
 
             for (int i = 0; i < MAX_MESSAGES; i++) {
               Serial.print(i);
               Serial.print(" - ");
               Serial.println(messages[i].content);
             }
+#endif
+            // User is updating system message
           } else if (state == UPDATE_SYS_MSG) {
 
             msgPtr->role = sys;  // New system message has been added, update the message role
-            state = GET_USER_INPUT;
             displayMsg((char*)SYSTEM_MSG_UPDATE_SUCCESS_ALERT, ALERT_MSG_LENGTH);
+
+            state = GET_USER_INPUT;
             bufferChange = false;  // Do not update display
-            Serial.println("  System Message Updated.");
+
+            Serial.println("  | System message updated.");
           }
 
+          // Any time enter is pressed, clear the current input for the next message
           clearInput = true;
+
+          Serial.print("    | state-> ");
+          Serial.println(state);
           break;
 
         case PS2_KEY_DELETE:
         case PS2_KEY_BS:
-          Serial.println("KeyPressed-> Backspace/Delete ");
 
-          inputIndex = inputIndex > 0 ? inputIndex - 1 : 0;
-          msgPtr->content[inputIndex] = ' ';
+          inputIdx = inputIdx > 0 ? inputIdx - 1 : 0;
+          msgPtr->content[inputIdx] = ' ';
+
+          Serial.println("KeyPressed-> Backspace/Delete ");
+          Serial.print("  | Input Index->");
+          Serial.println(inputIdx);
           break;
 
         case PS2_KEY_TAB:
         case PS2_KEY_SPACE:
-          Serial.print("KeyPressed-> Space/Tab");
 
-          if (inputIndex < MAX_MESSAGE_LENGTH - 1) {
-            msgPtr->content[inputIndex] = ' ';
-            inputIndex++;
+          if (inputIdx < MAX_MESSAGE_LENGTH - 1) {
+            msgPtr->content[inputIdx] = ' ';
+            inputIdx++;
           }
 
+          Serial.println("KeyPressed-> Space/Tab");
           Serial.print("  | Input Index->");
-          Serial.println(inputIndex);
+          Serial.println(inputIdx);
           break;
 
+        /* The Escape key changes allows the user to enter a new system message. */
         case PS2_KEY_ESC:
-          Serial.println("KeyPressed-> Esc");
           displayMsg((char*)SYSTEM_MSG_UPDATE_INITIATE_ALERT, ALERT_MSG_LENGTH);
           state = UPDATE_SYS_MSG;
-          inputIndex = 0;
+          inputIdx = 0;
           bufferChange = false;  // Do not update display
 
+          Serial.println("KeyPressed-> Esc");
+          Serial.print("  | state-> ");
+          Serial.println(state);
           break;
 
+        /* Up and down arrow keys are used when the user is reviewing a long response. */
         case PS2_KEY_UP_ARROW:
 
-          Serial.println("KeyPressed-> Up Arrow");
-
           // Arrow keys have no effect when user is inputing data
-          if (inputIndex == 0) {
+          if (inputIdx == 0) {
             displayOffset--;
             state = REVIEW_REPONSE;
           }
 
+          Serial.println("KeyPressed-> Up Arrow");
+          Serial.print("  | displayOffset->");
+          Serial.println(displayOffset);
           break;
 
         case PS2_KEY_DN_ARROW:
 
-          Serial.println("KeyPressed-> Down Arrow");
-
-          // Arrow keys have no effect when user is inputing data
-          if (inputIndex == 0) {
-            // Move the display index up/back one line
-            displayOffset++;
+          // Arrow keys have no effect if user has input text
+          if (inputIdx == 0) {
+  
+            displayOffset++; // Move the display index up/down one line
 
             if (displayOffset > 0) {
               displayOffset = 0;
@@ -496,6 +534,10 @@ void loop(void) {
 
             state = REVIEW_REPONSE;
           }
+
+          Serial.println("KeyPressed-> Down Arrow");
+          Serial.print("  | displayOffset->");
+          Serial.println(displayOffset);
           break;
 
         default:
@@ -506,24 +548,24 @@ void loop(void) {
 
             memset(msgPtr->content, 0, sizeof msgPtr->content);
 
-            inputIndex = 0;  // Return index to start
+            inputIdx = 0;  // Return index to start
             clearInput = false;
           }
 
-          if (inputIndex < MAX_MESSAGE_LENGTH - 1) {
+          if (inputIdx < MAX_MESSAGE_LENGTH - 1) {
 
             Serial.print(char(remappedKey));
-            msgPtr->content[inputIndex] = char(remappedKey);
-            inputIndex++;
+            msgPtr->content[inputIdx] = char(remappedKey);
+            inputIdx++;
             Serial.print("  | Input Index->");
-            Serial.println(inputIndex);
+            Serial.println(inputIdx);
 
-          } else if (inputIndex == MAX_MESSAGE_LENGTH - 1) {
+          } else if (inputIdx == MAX_MESSAGE_LENGTH - 1) {
             Serial.print("  | You've Reached the end of Input Index->");
-            Serial.println(inputIndex);
+            Serial.println(inputIdx);
 
-            msgPtr->content[inputIndex] = '<';
-            inputIndex++;
+            msgPtr->content[inputIdx] = '<';
+            inputIdx++;
           }
       }
     }
@@ -568,16 +610,16 @@ void loop(void) {
     */
     int oldestMsgIdx = 0;
 
-    if (numMessages >= MAX_MESSAGES) {
-      oldestMsgIdx = numMessages % MAX_MESSAGES;
+    if (msgCount >= MAX_MESSAGES) {
+      oldestMsgIdx = msgCount % MAX_MESSAGES;
     }
 
-    for (int i = 0; i < numMessages && i < MAX_MESSAGES; i++) {
-      Serial.print("numMessages ->");
-      Serial.println(numMessages);
+    for (int i = 0; i < msgCount && i < MAX_MESSAGES; i++) {
+      Serial.print("msgCount ->");
+      Serial.println(msgCount);
 
       // Inject system message before
-      if (i == numMessages - 1 || i == MAX_MESSAGES - 1) {
+      if (i == msgCount - 1 || i == MAX_MESSAGES - 1) {
         messagesJSON[i]["role"] = roleNames[systemMessage.role];
         messagesJSON[i]["content"] = systemMessage.content;
         i++;
@@ -623,9 +665,7 @@ void loop(void) {
       // Serial.print(line);
 
       bool responseSuccess = true;
-      // bool oncer = false;
       long startWaitTime = millis();
-      char thinkingMsg[] = "Thinking...";
 
       // Wait for server response
       while (client.available() == 0) {
@@ -637,7 +677,7 @@ void loop(void) {
           break;
         }
 
-        displayFace(5, thinkingMsg);
+        displayFace(WAITING_FOR_API_RESPONSE_INTERVAL, WAITING_FOR_API_RESPONSE_ALERT);
       }
 
       if (responseSuccess) {
@@ -661,12 +701,12 @@ void loop(void) {
           return;
         }
 
-        messages[numMessages % MAX_MESSAGES].role = assistant;
+        messages[msgCount % MAX_MESSAGES].role = assistant;
 
         // Clear char array
-        memset(messages[numMessages % MAX_MESSAGES].content, 0, sizeof messages[numMessages % MAX_MESSAGES].content);
+        memset(messages[msgCount % MAX_MESSAGES].content, 0, sizeof messages[msgCount % MAX_MESSAGES].content);
 
-        strncpy(messages[numMessages % MAX_MESSAGES].content, outputDoc["choices"][0]["message"]["content"] | "...", MAX_MESSAGE_LENGTH);
+        strncpy(messages[msgCount % MAX_MESSAGES].content, outputDoc["choices"][0]["message"]["content"] | "...", MAX_MESSAGE_LENGTH);
 
         responseLength = measureJson(outputDoc["choices"][0]["message"]["content"]);
 
@@ -681,7 +721,7 @@ void loop(void) {
         Serial.print("\nSize of most recent reponse -> ");
         Serial.println(responseLength);
 
-        numMessages++;
+        msgCount++;
 
         state = DISPLAY_RESPONSE;
 
@@ -709,7 +749,7 @@ void loop(void) {
   /***************************************************************************/
   if (bufferChange && (state == GET_USER_INPUT || state == UPDATE_SYS_MSG)) {
     //Serial.println("Print User Input");
-    displayMsg(msgPtr->content, inputIndex);
+    displayMsg(msgPtr->content, inputIdx);
   }
 
 
@@ -722,9 +762,9 @@ void loop(void) {
     Serial.println("---------------- printResponse Start----------------");
 
     // Roll over
-    int responseIdx = (numMessages % MAX_MESSAGES) - 1 < 0
+    int responseIdx = (msgCount % MAX_MESSAGES) - 1 < 0
                         ? MAX_MESSAGES - 1
-                        : numMessages % MAX_MESSAGES - 1;
+                        : msgCount % MAX_MESSAGES - 1;
 
 
     // Calculate the start and end display indices for the response and for  "response scrubbing" (ie, when the user presses up and down arrows to look through response on OLED)
