@@ -124,7 +124,7 @@ const char roleNames[3][10] = { "system", "user", "assistant" };
 /*******  GLOBALS  ******************************************************/
 /*************************************************************************/
 
-/*
+/******  Message and Message Array *********
   The "chat" format used by the OpenAI API is an array of {role, content} pairs.
   I am using the singular term "message" to refer to one of these pairs.
 
@@ -138,7 +138,7 @@ const char roleNames[3][10] = { "system", "user", "assistant" };
  
   To manage all these messages, we implement the following:
   1) A message struct for handling each {role, content} pair
-  2) A messages array, to hold each message.
+  2) A messages array, to hold all the message(s).
 
   The messages array is treated as a circular buffer.  When the number of messages exceeds
   the length of the array, the newest message overwrites the oldest messaage.  
@@ -154,17 +154,18 @@ struct message {
   char content[MAX_MESSAGE_LENGTH];
 } messages[MAX_MESSAGES];
 
-/* As mentioned ealier, the system message is a special message meant to steer the models response.
-In the current configuation, the system message is NOT stored in the messages array, but rather inserted
-into the JSON packet during the API call, prior to the last message sent.
-
-The system message is meant to be used for fun, and to configure the kind of response you want from the chatBot. */
+/******* System message *********
+  As mentioned ealier, the system message is a special message meant to steer the models response.
+  In the current configuation, the system message is NOT stored in the messages array, but rather inserted
+  into the JSON packet during the API call, prior to the last message sent.
+  The system message can be used for fun, and to configure the kind of response you want from the chatBot. */
 message systemMessage = { sys, "Respond as if you were a pirate." };
 
-
+// Used when API is not responding, prior to making another API call.
 message noConnect = { assistant, "I'm sorry, I seem to be having a brain fart, let me think on that again." };
 
-// The number of characters in the assistant response
+/* The number of characters in the assistant response.  
+This is used extensively in how the message response is displayed. */
 unsigned int responseLength;
 
 // OLED Display
@@ -181,44 +182,78 @@ PS2KeyMap keymap;
 /*
  * Function:  displayMsg 
  * -------------------------
- * Displays contents of char array to OLED.
+ * Displays contents of char array to OLED with text wrapping.
+ * If text exceeds text exceeds the number of lines, it scrolls
+ * the lines up to display the text. 
+ * 
  * Clears OLED when starts.
+ * 
+ * This function is used for displaying user text while tying,
+ * text from the assistant, system message undates, and ALERT messages.
+ * It is also invoked when a user presses the up and down arrows to 
+ * review the response.    
+ * 
+ * msg[]: The source char array to display from
+ * endIdx:  The last index to display from, non-inclusive
+ * startIdx:  The first index to display from, inclusive, defaults to 0
+ * setDelay:  If true, delays and redraws display everytime a space ' ' is encountered, 
+ *            defaults to false    
+ * 
+ * returns: void
  */
 void displayMsg(char msg[], int endIdx, int startIdx = 0, bool setDelay = false) {
 
+  // Clear display and position cursor in top left of screen.
   u8g2.clearBuffer();
   u8g2.setCursor(0, 0);
 
+  // Track which "line" the text is on. 0 indexed.
   int lineNum = 0;
 
-  int i, count;
-  bool firstTime = true;
+  bool firstTime = true;  // Used to control when and when not to delay text displaying
 
+  /* 'i' gets modulated when the text scrolls, and is the index of the text on the display.
+  If the message is long, and the text scrolls up, a specifc character will be displayed 
+  and then cleared multiple times.
+
+  'count' is the number of chars that have been displayed thus far from the char array, 
+  it is used to trigger the scroll action. */
+  int i, count;
+
+  // Display chars from startIdx to endIdx
   for (i = startIdx, count = 1; i < endIdx; i++, count++) {
 
+    // Move cursor to left and down one line for text wrapping. (Always occurs first time through)
     if (i % MAX_CHAR_PER_OLED_ROW == 0) {
       lineNum++;
       u8g2.setCursor(0, FONT_HEIGHT * lineNum);
     }
 
-    u8g2.print(msg[i]);
+    u8g2.print(msg[i]);  // Write char to display buffer
 
-    // Delay at spaces
+    /* Display and delay at spaces ' '.
+    this effect is meant to mimic the chatGTP web interface */
     if ((msg[i] == ' ' && setDelay)) {
 
+      /* Only delay the first time the text is shown or when the text scrolls up
+      we only want to delay displaying of the next new line, not the previously drawn lines */
       if (firstTime || lineNum == MAX_OLED_ROWS) {
         delay(300);
-        u8g2.sendBuffer();
+        u8g2.sendBuffer();  // Display all text.
       }
     }
 
+    /* If you exceed the number of chars avaiable on the screen, 
+      clear the display, and move i backward so that the next time through we'll
+      redraw all but one of the previous lines to make room for the next line.
+      In this way, the text auto "scrolls" up when a long message is displayed. */
     if ((count != 0) && ((count % MAX_CHARS_ON_SCREEN) == 0)) {
 
-      u8g2.clearBuffer();
+      u8g2.clearBuffer();  // Clear all text in the buffer.
 
-      i -= MAX_CHARS_ON_SCREEN - MAX_CHAR_PER_OLED_ROW;  // Move back 4 lines
+      i -= MAX_CHARS_ON_SCREEN - MAX_CHAR_PER_OLED_ROW;  // Move back total lines - 1
       lineNum = 0;
-      firstTime = false;
+      firstTime = false;  // When we re-display the previous lines, we don't want to delay.
     }
   }
 
