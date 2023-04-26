@@ -123,7 +123,35 @@ const char roleNames[3][10] = { "system", "user", "assistant" };
 #define MAX_TOKENS 50      // Each token is roughly 3/4 of a word.  The longer this bigger this number, the longer the potenial response.
 #define CHARS_PER_TOKEN 6  // Each token equates to roughly 4 chars, but does not include spaces, the number 6 was chosen to act as a safety buffer incase a response is above average length.
 #define MAX_MESSAGE_LENGTH (MAX_TOKENS * CHARS_PER_TOKEN)
-#define MAX_MESSAGES 10  // Everytime you send a message, it must inlcude all previous messages in order to respond with context, this limits the depth of your chats.
+
+/* The messages you send to OpenAI DO NOT PERSIST in the model,
+so everytime you send a message to the OpenAI API, you'll want to include 
+as many previous messages in order for the model to respond with context.
+The value below determines the depth of that context.  A small number means the responses
+will not have as much memory, but will cost less and require much less memory.
+A large value will allow for more rapport in the assistant repsonses, 
+but will cost much more and take up load more memory. 
+It depends on what you're after.  10 has been a good number for me.
+When testing code not related to reponses, I recommend using a small number, like 4. */
+#define MAX_MESSAGES 3  // Min 2, Max 20
+
+/* When sending message, they all go into a JSON doc.  The sizes of this doc 
+depends on the size of the previous choices. The value below is based on a 
+MAX_MESSAGE_LENGTH of 375 and MAX_MESSAGES of 20.  Should you have a larger values for 
+these, you'll likely want to adjust this value. You can use the ArduinoJSON Assistant 
+to help you calculate a size:
+
+  https://arduinojson.org/v6/assistant 
+  https://arduinojson.org/v6/how-to/determine-the-capacity-of-the-jsondocument/
+
+Also included with this repo is a text file with sample JSON data to 
+play around with sizing.*/
+#define DYNAMIC_JSON_DOC_SERIALIZE_SIZE 12288  // bytes
+
+/******** STEVE QUESTION 3 ********
+For some reason I am intimidated by determing memory available on a given board for 
+things like constants, globals, heap, stack, etc.  Not sure what my deal is.
+*/
 
 /*************************************************************************/
 /*******  GLOBALS  ******************************************************/
@@ -510,10 +538,9 @@ void loop(void) {
         /* Up and down arrow keys are used when the user is reviewing a long response. */
         case PS2_KEY_UP_ARROW:
 
-          // Arrow keys have no effect when user is inputing data
-          if (inputIdx == 0) {
-            displayOffset--;
-            state = REVIEW_REPONSE;
+          if (inputIdx == 0) {       // If a user is typing a new message, block arrow keys.
+            displayOffset--;         // Move the display index up one line
+            state = REVIEW_REPONSE;  // Make sure the change is displayed on the screen
           }
 
           Serial.println("KeyPressed-> Up Arrow");
@@ -523,16 +550,14 @@ void loop(void) {
 
         case PS2_KEY_DN_ARROW:
 
-          // Arrow keys have no effect if user has input text
-          if (inputIdx == 0) {
+          if (inputIdx == 0) {  // If a user is typing a new message, block arrow keys.
+            displayOffset++;    // Move the display index down one line
 
-            displayOffset++;  // Move the display index up/down one line
-
-            if (displayOffset > 0) {  //  displayOffset of 0 represents the top of the screen,
-              displayOffset = 0;      //  so you can't move about that.
+            if (displayOffset > 0) {  // displayOffset of 0 represents the top of the screen,
+              displayOffset = 0;      // so you can't move above that.
             }
 
-            state = REVIEW_REPONSE;
+            state = REVIEW_REPONSE;  // Make sure the change is displayed on the screen
           }
 
           Serial.println("KeyPressed-> Down Arrow");
@@ -544,47 +569,59 @@ void loop(void) {
 
           if (clearInput) {
 
-            /* Since we are using the messages array as a cirular buffer,
-            we'll clear all the previous data in the message content pointed to by msgPtr. */
-            memset(msgPtr->content, 0, sizeof msgPtr->content);
+            /* Clear all the previous data in the message content pointed to by msgPtr. */
+            memset(msgPtr->content, 0, MAX_MESSAGE_LENGTH);
+            /******** STEVE QUESTION 2 *******
+            I'm not sure how to ask this question yet, so this is a reminder for me to formulate it better.
+            I am using memset, not because it displays vestiages of over written data, but becuase it sends
+            the vestiges of overwritten data to the API.
+
+            I know this happens with the system message.  Maybe is does not happen with the others? 
+            */
             inputIdx = 0;        // Return index to 0 for new message
             clearInput = false;  // Reset flag
 
-            Serial.print("  | Message cleared.");
+            Serial.println("  | Message cleared.");
           }
 
+          // Assign incoming char to a message if there is still room
           if (inputIdx < MAX_MESSAGE_LENGTH - 1) {
 
-            Serial.print(char(remappedKey));
             msgPtr->content[inputIdx] = char(remappedKey);
             inputIdx++;
+
+            Serial.print(char(remappedKey));
+
+#ifdef DEBGUB
             Serial.print("  | Input Index->");
             Serial.println(inputIdx);
-
+#endif
+            /* If you have come to the end of the msg content, 
+            add a visual indicator to let the user know. */
           } else if (inputIdx == MAX_MESSAGE_LENGTH - 1) {
-            Serial.print("  | You've Reached the end of Input Index->");
-            Serial.println(inputIdx);
-
             msgPtr->content[inputIdx] = '<';
             inputIdx++;
+
+            Serial.print("  | You've Reached the end of Input Index->");
+            Serial.println(inputIdx);
           }
-      }
-    }
-  }
+      }  // Close switch-case
+    }    // Close if Command/printable key
+  }      // Close if keyboard input available
 
   /***************************************************************************/
   /*********** GET RESPONSE FROM OPEN_AI *************************************/
   /***************************************************************************/
   if (state == GET_REPONSE) {
 
-    Serial.println("----------------------Start GET RESPONSE---------------");
+    Serial.println("  | Start API Call");
 
     // Create a secure wifi client
     WiFiClientSecure client;
     client.setCACert(rootCACertificate);
 
-    // Generate the JSON document that will be sent to OpenAI
-    DynamicJsonDocument doc(12288);
+    // Generate the JSON document that will be sent to OpenAI.
+    DynamicJsonDocument doc(DYNAMIC_JSON_DOC_SERIALIZE_SIZE);
 
     // Add static parameters that get sent with all messages https://platform.openai.com/docs/api-reference/chat/create
     doc["model"] = "gpt-3.5-turbo";
