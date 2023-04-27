@@ -484,15 +484,6 @@ void loop(void) {
 
             Serial.println("  | User message submitted");
 
-#ifdef DEBGUB
-            Serial.println("------------------- Message Buffer ----------------------");
-
-            for (int i = 0; i < MAX_MESSAGES; i++) {
-              Serial.print(i);
-              Serial.print(" - ");
-              Serial.println(messages[i].content);
-            }
-#endif
             // User is updating system message
           } else if (state == UPDATE_SYS_MSG) {
 
@@ -605,10 +596,6 @@ void loop(void) {
 
             Serial.print(char(remappedKey));
 
-#ifdef DEBGUB
-            Serial.print("  | Input Index->");
-            Serial.println(inputIdx);
-#endif
             /* If you have come to the end of the msg content, 
             add a visual indicator to let the user know. */
           } else if (inputIdx == MAX_MESSAGE_LENGTH - 1) {
@@ -856,17 +843,6 @@ but no more.  So make sure you only use this when debugging server response issu
       // Reset display offset every time a new message is revieced
       displayOffset = 0;
 
-#ifdef DEBUG_SERVER_RESPONSE_BREAKING
-      Serial.print("responseLength -> ");
-      Serial.print(responseLength);
-      Serial.print("   startIdx -> ");
-      Serial.print(startIdx);
-      Serial.print("   endIdx -> ");
-      Serial.print(endIdx);
-      Serial.print("   state -> ");
-      Serial.println(state);
-#endif
-
       /*  Prepare start and stop indexes if the user is reviewing the response with up and down arrows.
       This means the reponse was long and the total number of text lines exceeded
       the aviable space to show on the screen. */
@@ -898,25 +874,6 @@ but no more.  So make sure you only use this when debugging server response issu
       }
 
       endIdx = startIdx + MAX_CHARS_ON_SCREEN - 1;
-
-#ifdef DEBUG_SERVER_RESPONSE_BREAKING
-      Serial.print("responseLength -> ");
-      Serial.print(responseLength);
-      Serial.print("   fullRowsOfText -> ");
-      Serial.print(fullRowsOfText);
-      Serial.print("   endFrameLastIdx -> ");
-      Serial.print(endFrameLastIdx);
-      Serial.print("   endFrameFirstIdx -> ");
-      Serial.print(endFrameFirstIdx);
-      Serial.print("   scrubAdj -> ");
-      Serial.print(scrubAdj);
-      Serial.print("   startIdx -> ");
-      Serial.print(startIdx);
-      Serial.print("   endIdx -> ");
-      Serial.print(endIdx);
-      Serial.print("   state -> ");
-      Serial.println(state);
-#endif
     }
 
     // Display message
