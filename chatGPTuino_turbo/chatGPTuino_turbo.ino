@@ -13,6 +13,7 @@
 #include "bitmaps.h"      // Images shown on screen
 
 #define DEBUG
+//#define DEBUG_SERVER_RESPONSE_BREAKING
 
 // Pins for PS/2 keyboard (through USB)
 #define DATAPIN 6  // (USB Data -)  (PS2 pin 1)
@@ -23,6 +24,7 @@ const char* openAPIendPoint = "https://api.openai.com/v1/chat/completions";
 const char* server = "api.openai.com";
 #define PORT 443                               // The port you'll connect to on the server - this is standard.
 #define SERVER_RESPONSE_WAIT_TIME (15 * 1000)  // How long to wait for a server response (seconds * 1000)
+
 
 // OpenAI API endpoint root certificate used to ensure response is actually from OpenAPI
 const char* rootCACertificate =
@@ -72,11 +74,22 @@ const char* rootCACertificate =
 const char SYSTEM_MSG_UPDATE_INITIATE_ALERT[ALERT_MSG_LENGTH] = "Enter new system message.";
 const char SYSTEM_MSG_UPDATE_SUCCESS_ALERT[ALERT_MSG_LENGTH] = "System message updated! Start typing to ask next question.";
 const char WELCOME_INSTRUCTIONS_ALERT[ALERT_MSG_LENGTH] = "Start typing to chat.";
-const char BOOT_SCREEN_ALERT[ALERT_MSG_LENGTH] = "Hi. I'm chatGPTuino.";
-const char WAITING_FOR_API_RESPONSE_ALERT[ALERT_MSG_LENGTH] = "Thinking...";
 
-#define BOOT_ALERT_INTERVAL (3 * 1000)                // Milliseconds to show boot message
-#define WAITING_FOR_API_RESPONSE_INTERVAL (1 * 1000)  // Milliseconds to show boot message
+/*************** Animation Messages ***************
+  Messages dispayed below face animation. */
+#define ANIMATION_MSG_LENGTH (MAX_CHAR_PER_OLED_ROW + 1)
+const char BOOT_SCREEN_MSG[ANIMATION_MSG_LENGTH] = "Hi. I'm chatGPTuino.";
+const char WAITING_FOR_API_RESPONSE_MSG[ANIMATION_MSG_LENGTH] = "Thinking...";
+const char API_RESPONSE_FAIL_MSG[ANIMATION_MSG_LENGTH] = "Brain freeze, 1 sec";
+const char SERVER_CONNECTION_FAIL_MSG[ANIMATION_MSG_LENGTH] = "Contemplating...";
+const char DESERIALIZE_FAIL_MSG[ANIMATION_MSG_LENGTH] = "I'm a bit scrambled.";
+
+/* These correspond to the messages above, and define the milliseconds each will show. */
+#define BOOT_ALERT_INTERVAL (3 * 1000)
+#define WAITING_FOR_API_RESPONSE_INTERVAL (1 * 1000)  // This length needs to stay low, as it could slow down acknowledging the response
+#define API_RESPONSE_FAIL_INTERVAL (2 * 1000)
+#define SERVER_CONNECTION_FAIL_INTERVAL (2 * 1000)
+#define DESERIALIZE_FAIL_INTERVAL (2 * 1000)
 
 /******** STEVE QUESTION 1 ********
   I made the above character arrays constant, because they are never intended to change.
@@ -133,7 +146,7 @@ A large value will allow for more rapport in the assistant repsonses,
 but will cost much more and take up load more memory. 
 It depends on what you're after.  10 has been a good number for me.
 When testing code not related to reponses, I recommend using a small number, like 4. */
-#define MAX_MESSAGES 3  // Min 2, Max 20
+#define MAX_MESSAGES 4  // Min 2, Max 20
 
 /* When sending message, they all go into a JSON doc.  The sizes of this doc 
 depends on the size of the previous choices. The value below is based on a 
@@ -372,7 +385,7 @@ void setup(void) {
   u8g2.setFont(u8g2_font_6x13_tf);  //https://github.com/olikraus/u8g2/wiki/fntlist12
 
   // Show a face and message, and then instructions.
-  displayFace(BOOT_ALERT_INTERVAL, BOOT_SCREEN_ALERT);
+  displayFace(BOOT_ALERT_INTERVAL, BOOT_SCREEN_MSG);
   displayMsg((char*)WELCOME_INSTRUCTIONS_ALERT, ALERT_MSG_LENGTH);
 
   Serial.println("...Setup Ended");
@@ -614,7 +627,9 @@ void loop(void) {
   /***************************************************************************/
   if (state == GET_REPONSE) {
 
-    Serial.println("  | Start API Call");
+    Serial.println("Start API Call");
+    Serial.print("    | msgCount->");
+    Serial.println(msgCount);
 
     // Create a secure wifi client
     WiFiClientSecure client;
@@ -624,39 +639,50 @@ void loop(void) {
     DynamicJsonDocument doc(DYNAMIC_JSON_DOC_SERIALIZE_SIZE);
 
     // Add static parameters that get sent with all messages https://platform.openai.com/docs/api-reference/chat/create
-    doc["model"] = "gpt-3.5-turbo";
+    doc["model"] = "gpt-3.5-turbo";  // Current model, will soon be gpt-4...
     doc["max_tokens"] = MAX_TOKENS;
 
     // Create nested array that will hold all the system, user, and assistant messages
     JsonArray messagesJSON = doc.createNestedArray("messages");
 
-    /* 
-      Our array messages[] is used like a circular buffer.  
-      If the size of messages[] is 10, and we add an 11th message, 
-      then messages[0] is replaced with the 11th message. 
+    /* Our array messages[] is used like a circular buffer.  
+    If the size of messages[] is 10, and we add an 11th message, 
+    then messages[0] is replaced with the 11th message. 
       
-      This means that messages[0] may hold a message that is newer 
-      (more recent chronologically) than messages[1].
+    This means that messages[0] may hold a message that is newer 
+    (more recent chronologically) than messages[1].
       
-      When we send the messages to Open AI, the messages need to be in order
-      from oldest to newest.  So messagesJSON[0], DOES NOT always map to
-      messages[0].  In the case above, messagesJSON[0] would equal messages[1]
-      since messages[1] was the oldest message sent.
+    When we send the messages to OpenAI, the messages need to be in order
+    from oldest to newest.  So messagesJSON[0], DOES NOT always map to
+    messages[0].  In the case above, messagesJSON[0] would equal messages[1]
+    since messages[1] was the oldest message sent.
 
-      To maintain this chronological mapping from messages[] to messagesJSON[]
-      we introduce an new index. 
-    */
+    To maintain this chronological mapping from messages[] to messagesJSON[]
+    we introduce a new index. */
     int oldestMsgIdx = 0;
 
+    /* If the total number of messages sent between user 
+    and agent exceeds the max, circle back around. */
     if (msgCount >= MAX_MESSAGES) {
       oldestMsgIdx = msgCount % MAX_MESSAGES;
     }
 
-    for (int i = 0; i < msgCount && i < MAX_MESSAGES; i++) {
-      Serial.print("msgCount ->");
-      Serial.println(msgCount);
+    /* Copy all message(s) from messages[] to messagesJSON[].
+    Additionally, inject the system message prior to the most recent message sent.
+    'i' is used to index messagesJSON[], and 'oldestMsgIdx' is used to index messages[]  */
 
-      // Inject system message before
+    /******** STEVE QUESTION 5 ********
+    Below I set a JSON array element equal to the "content" member of a message struct.
+    This works (i.e. The text saved in the struct is being brought over to the JSON Array),
+    but for some reason I feel like it shouldn't...
+
+    I guess the statment "systemMessage.content" is not a pointer.     
+    Is what I'm doing below something not advised?     
+    */
+
+    for (int i = 0; i < msgCount && i < MAX_MESSAGES; i++) {
+
+      // Inject system message before most recent message
       if (i == msgCount - 1 || i == MAX_MESSAGES - 1) {
         messagesJSON[i]["role"] = roleNames[systemMessage.role];
         messagesJSON[i]["content"] = systemMessage.content;
@@ -670,21 +696,20 @@ void loop(void) {
       oldestMsgIdx %= MAX_MESSAGES;
     }
 
-    Serial.println("");
-    Serial.println("<-------------------JSON TO BE SENT--------------------->");
+#ifdef DEBUG
+    Serial.println("    | JSON to be sent:");
     serializeJsonPretty(doc, Serial);
     Serial.println("");
+#endif
 
-    int conn = client.connect(server, PORT);
+    int conn = client.connect(server, PORT);  // Connect to OpenAI
 
-    delay(1000);
-
+    // If connection is successful, send JSON
     if (conn == 1) {
-      Serial.println();
-      Serial.println("Sending Parameters...");
-      //Request
+      Serial.println("    | Connected to OpenAI");
+      // Make request
       client.println("POST https://api.openai.com/v1/chat/completions HTTP/1.1");
-      //Headers
+      // Send headers
       client.print("Host: ");
       client.println(server);
       client.println("Content-Type: application/json");
@@ -693,103 +718,115 @@ void loop(void) {
       client.print("Authorization: ");
       client.println(openAI_Private_key);
       client.println("Connection: Close");
+      /* The empty println below inserts a stand-alone carriage return and newline (CRLF) 
+      which is part of the HTTP protocol following sending headers and prior to sending the body. */
       client.println();
-      // Body
-      serializeJson(doc, client);
-      client.println();
+      serializeJson(doc, client);  // Serialize the JSON doc and append to client object
+      client.println();            // Send the body to the server
 
-      // Troubelshoot server reponse
-      // String line = client.readStringUntil('X'); //NOTE -> this will make wait for server response below execute - neesds chanded...
-      // Serial.print(line);
+      Serial.println("    | JSON sent");
 
-      bool responseSuccess = true;
-      long startWaitTime = millis();
+/* Seeing the headers of the server response can be extremely useful to troubleshooting
+connection errors.  However, this readout of the server response header breaks 
+how the message is parsed from the response.  So you'll be able to send and receive one message,
+but no more.  So make sure you only use this when debugging server response issues. */
+#ifdef DEBUG_SERVER_RESPONSE_BREAKING
+      String line = client.readStringUntil('X');
+      Serial.print(line);
+#endif
 
-      // Wait for server response
+      //  Wait for OpenAI response
+      bool responseSuccess = true;    // Flag that triggers parsing and copying reponse
+      long startWaitTime = millis();  // Measure how long it takes
+
       while (client.available() == 0) {
+        // While waiting, show a face animation.
+        displayFace(WAITING_FOR_API_RESPONSE_INTERVAL, WAITING_FOR_API_RESPONSE_MSG);
 
+        /* If you've been waiting too long, perhaps something went wrong,
+        break out and try again. */
         if (millis() - startWaitTime > SERVER_RESPONSE_WAIT_TIME) {
-          Serial.println("!!---------SERVER_RESPONSE_WAIT_TIME exceeded -----");
+          Serial.println("    | SERVER_RESPONSE_WAIT_TIME exceeded.");
 
           responseSuccess = false;
           break;
         }
-
-        displayFace(WAITING_FOR_API_RESPONSE_INTERVAL, WAITING_FOR_API_RESPONSE_ALERT);
       }
 
+      // If you receive a response, parse the JSON and copy the response to messages[]
       if (responseSuccess) {
 
-        client.find("\r\n\r\n");
+        client.find("\r\n\r\n");  // This search get us to the body section of the http response
 
-        // Filter returning JSON
+        /* Create a filter for the returning JSON 
+        https://arduinojson.org/news/2020/03/22/version-6-15-0/ */
         StaticJsonDocument<500> filter;
         JsonObject filter_choices_0_message = filter["choices"][0].createNestedObject("message");
         filter_choices_0_message["role"] = true;
         filter_choices_0_message["content"] = true;
 
+        // Deserialize the JSON
         StaticJsonDocument<2000> outputDoc;
         DeserializationError error = deserializeJson(outputDoc, client, DeserializationOption::Filter(filter));
 
-        client.stop();
-
+        // If deserialization fails, exit immediately and try again.
         if (error) {
-          Serial.print("deserializeJson() failed: ");
+
+          displayFace(DESERIALIZE_FAIL_INTERVAL, DESERIALIZE_FAIL_MSG);
+          client.stop();
+
+          Serial.print("    | deserializeJson() failed->");
           Serial.println(error.c_str());
+
           return;
         }
 
-        messages[msgCount % MAX_MESSAGES].role = assistant;
+        // Update messages[] with new message details
+        messages[msgCount % MAX_MESSAGES].role = assistant;                                                                             // Assign incoming message role as 'assistant'
+        strncpy(messages[msgCount % MAX_MESSAGES].content, outputDoc["choices"][0]["message"]["content"] | "...", MAX_MESSAGE_LENGTH);  // Copy content
 
-        // Clear char array
-        memset(messages[msgCount % MAX_MESSAGES].content, 0, sizeof messages[msgCount % MAX_MESSAGES].content);
-
-        strncpy(messages[msgCount % MAX_MESSAGES].content, outputDoc["choices"][0]["message"]["content"] | "...", MAX_MESSAGE_LENGTH);
-
+        // Measure the length of the response
         responseLength = measureJson(outputDoc["choices"][0]["message"]["content"]);
+        msgCount++;                // We successfully received and saved a new message
+        state = DISPLAY_RESPONSE;  // Now display response
 
-        Serial.println("-------------------Message Buffer--------------------");
+#ifdef DEBUG
+        Serial.println("    |------------------- Messages[] --------------------");
 
         for (int i = 0; i < MAX_MESSAGES; i++) {
+          Serial.print("    | ");
           Serial.print(i);
           Serial.print(" - ");
           Serial.println(messages[i].content);
         }
 
-        Serial.print("\nSize of most recent reponse -> ");
+        Serial.print("    | Size of most recent reponse -> ");
         Serial.println(responseLength);
-
-        msgCount++;
-
-        state = DISPLAY_RESPONSE;
+        Serial.println("    |----------------------------------------------------");
+#endif
 
       } else {
-        u8g2.clearBuffer();
-        u8g2.setCursor(0, FONT_HEIGHT * 2);
-        u8g2.print("Brain freeze, 1 sec");
-        u8g2.sendBuffer();
-
-        state = GET_REPONSE;
+        // Server did not responsd to POST request, go through loop and try again.
+        displayFace(API_RESPONSE_FAIL_INTERVAL, API_RESPONSE_FAIL_MSG);
+        Serial.println("    | Server did not respond. Trying again.");
       }
 
     } else {
-      client.stop();
-      Serial.println("");
-      Serial.println("Connection Failed");
+      // Failed to connect to server, go through loop and try again.
+      displayFace(SERVER_CONNECTION_FAIL_INTERVAL, SERVER_CONNECTION_FAIL_MSG);
+      Serial.println("    | Could not connect to server. Trying again.");
     }
 
-    Serial.println("<-------------------- END Get Reponse ----------------->");
+    // Disconnect from server after response received,  server timeout, or connection failure
+    client.stop();
   }
-
 
   /***************************************************************************/
   /*********** Print User Input - Only change display for new input **********/
   /***************************************************************************/
   if (bufferChange && (state == GET_USER_INPUT || state == UPDATE_SYS_MSG)) {
-    //Serial.println("Print User Input");
     displayMsg(msgPtr->content, inputIdx);
   }
-
 
   /***************************************************************************/
   /***** Print Response one word at a time **********************************/
