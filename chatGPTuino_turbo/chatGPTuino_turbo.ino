@@ -551,8 +551,8 @@ void loop(void) {
         /* Up and down arrow keys are used when the user is reviewing a long response. */
         case PS2_KEY_UP_ARROW:
 
-          if (inputIdx == 0) {       // If a user is typing a new message, block arrow keys.
-            displayOffset--;         // Move the display index up one line
+          if (inputIdx == 0) {       // Ensure user is not typing a new message (maybe they pressed arrow key by accident)
+            displayOffset--;         // Move the display index back one line
             state = REVIEW_REPONSE;  // Make sure the change is displayed on the screen
           }
 
@@ -563,11 +563,11 @@ void loop(void) {
 
         case PS2_KEY_DN_ARROW:
 
-          if (inputIdx == 0) {  // If a user is typing a new message, block arrow keys.
-            displayOffset++;    // Move the display index down one line
+          if (inputIdx == 0) {  // Ensure user is not typing a new message (maybe they pressed arrow key by accident)
+            displayOffset++;    // Move the display index forward one line
 
-            if (displayOffset > 0) {  // displayOffset of 0 represents the top of the screen,
-              displayOffset = 0;      // so you can't move above that.
+            if (displayOffset > 0) {  // displayOffset of 0 represents the bottom of the message,
+              displayOffset = 0;      // so you can't move below that.
             }
 
             state = REVIEW_REPONSE;  // Make sure the change is displayed on the screen
@@ -627,7 +627,7 @@ void loop(void) {
   /***************************************************************************/
   if (state == GET_REPONSE) {
 
-    Serial.println("Start API Call");
+    Serial.println("|- Start API Call -------------------------------|");
     Serial.print("    | msgCount->");
     Serial.println(msgCount);
 
@@ -829,23 +829,25 @@ but no more.  So make sure you only use this when debugging server response issu
   }
 
   /***************************************************************************/
-  /***** Print Response one word at a time **********************************/
+  /***** Print Response ******************************************************/
   /***************************************************************************/
-
   if (state == DISPLAY_RESPONSE || state == REVIEW_REPONSE) {
 
-    Serial.println("---------------- printResponse Start----------------");
+    Serial.println("|- Print Response -------------------------------|");
 
-    // Roll over
-    int responseIdx = (msgCount % MAX_MESSAGES) - 1 < 0
-                        ? MAX_MESSAGES - 1
-                        : msgCount % MAX_MESSAGES - 1;
+    /*  Determine the most recent message index - recall, the most recent message IS NOT always
+    the latest element in the messages[] array. */
+    int responseIdx = (msgCount % MAX_MESSAGES) - 1 < 0  // Check if you've reached the last index
+                        ? MAX_MESSAGES - 1               // If so, we'll want to print the last index
+                        : msgCount % MAX_MESSAGES - 1;   // Otherwise, circle back
 
-
-    // Calculate the start and end display indices for the response and for  "response scrubbing" (ie, when the user presses up and down arrows to look through response on OLED)
+    /* Calculate the start and end display indices for the response and for  "response scrubbing" 
+    (ie, when the user presses up and down arrows to look through response on OLED) */
     int startIdx;
     int endIdx;
 
+    /*  Prepare start and stop indexes to display a new response one word at a time.  If the number of text lines
+    exceeds the available space, we'll shift all the text up one row as we keep displaying. */
     if (state == DISPLAY_RESPONSE) {
 
       startIdx = 0;
@@ -854,6 +856,7 @@ but no more.  So make sure you only use this when debugging server response issu
       // Reset display offset every time a new message is revieced
       displayOffset = 0;
 
+#ifdef DEBUG_SERVER_RESPONSE_BREAKING
       Serial.print("responseLength -> ");
       Serial.print(responseLength);
       Serial.print("   startIdx -> ");
@@ -862,8 +865,12 @@ but no more.  So make sure you only use this when debugging server response issu
       Serial.print(endIdx);
       Serial.print("   state -> ");
       Serial.println(state);
+#endif
 
-    } else {
+      /*  Prepare start and stop indexes if the user is reviewing the response with up and down arrows.
+      This means the reponse was long and the total number of text lines exceeded
+      the aviable space to show on the screen. */
+    } else if (state == REVIEW_REPONSE) {
 
       // How many spaces are needed to complete the last row
       byte spacesToCompleteLastRow = MAX_CHAR_PER_OLED_ROW - responseLength % MAX_CHAR_PER_OLED_ROW;
@@ -883,13 +890,16 @@ but no more.  So make sure you only use this when debugging server response issu
       // Determine start/ end indices
       startIdx = endFrameFirstIdx + scrubAdj;
 
+      // Start index can never be negative
       if (startIdx < 0) {
         startIdx = 0;
-        displayOffset++;
+        displayOffset++;  // Negates an up arrow press in case user keeps pressing up arrow when already
+                          // at the beginning of a message so displayOffset will not accumulate presses
       }
 
       endIdx = startIdx + MAX_CHARS_ON_SCREEN - 1;
 
+#ifdef DEBUG_SERVER_RESPONSE_BREAKING
       Serial.print("responseLength -> ");
       Serial.print(responseLength);
       Serial.print("   fullRowsOfText -> ");
@@ -906,12 +916,11 @@ but no more.  So make sure you only use this when debugging server response issu
       Serial.print(endIdx);
       Serial.print("   state -> ");
       Serial.println(state);
+#endif
     }
 
+    // Display message
     displayMsg(messages[responseIdx].content, endIdx, startIdx, state == DISPLAY_RESPONSE ? true : false);
-
-    state = GET_USER_INPUT;
-
-    Serial.println("---------------- printResponse Stop ----------------");
+    state = GET_USER_INPUT;  // Prepare for new user input
   }
 }
