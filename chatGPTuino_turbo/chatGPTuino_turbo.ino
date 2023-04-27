@@ -702,7 +702,7 @@ void loop(void) {
       client.println("Content-Type: application/json");
       client.print("Content-Length: ");
       client.println(measureJson(doc));
-      client.print("Authorization: ");
+      client.print("Authorization: Bearer ");
       client.println(openAI_Private_key);
       client.println("Connection: Close");
       /* The empty println below inserts a stand-alone carriage return and newline (CRLF) 

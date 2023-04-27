@@ -1,7 +1,9 @@
-/* 
-This is a 375 char message length, with 20 messages. The recommended size of 12288 bytes according to
+/*********************************************************************** 
+MAX_MESSAGE_LENGTH 375
+MAX_MESSAGES 20
+ArduinoJSON Assistant recommended size: 12288 bytes
 https://arduinojson.org/v6/assistant/
-*/
+************************************************************************/
 
 {
   "model": "gpt-3.5-turbo",
@@ -34,6 +36,154 @@ https://arduinojson.org/v6/assistant/
       "role": "user",
       "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
     },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    }
+  ]
+}
+
+
+/*********************************************************************** 
+MAX_MESSAGE_LENGTH 375
+MAX_MESSAGES 17
+ArduinoJSON Assistant recommended size: 8192 bytes
+https://arduinojson.org/v6/assistant/
+************************************************************************/
+
+{
+  "model": "gpt-3.5-turbo",
+  "messages": [
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    },
+    {
+      "role": "user",
+      "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"
+    }
+  ]
+}
+
+
+/*********************************************************************** 
+MAX_MESSAGE_LENGTH 375
+MAX_MESSAGES 13
+ArduinoJSON Assistant recommended size: 6144 bytes
+https://arduinojson.org/v6/assistant/
+************************************************************************/
+
+{
+  "model": "gpt-3.5-turbo",
+  "messages": [
     {
       "role": "user",
       "content": "ZdEptCph91FtqMG0N67mocyq73UtEeCdRpRYTEbO9WCAG1R4FDMtjJelZIKs89n7STYKyPd8CowEzknX4GJ4lgNYGnnXx8gNtJ4noloE3fPXdifLrVlXZzlsoSg15T3koF9fL10hUNpM0BG3uvQrqHWuPC5nDLEVbcYXPDL9tB7EREkjKnBpQdQDywg222zT6dgVV2diuhktvHEsIsSZkAeri8e7u4R8AyeL1ZMpTekLfPZ9bH5Srkt2C6Wd5uwtzFnNtdGOlLJ6CSJeWQDnsnzO6JuKweRonLEodAmfdT876QsC36EHXOuszIW3O329H0qJJERvyQJvrDYtO93an213JsVT1bG0zVlkuWDMaKUJL0oeIpEX2uA"

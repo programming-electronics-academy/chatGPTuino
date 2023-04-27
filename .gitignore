@@ -1,7 +1,6 @@
 
-
 # Secrets
-credentials.h
+secrets.h
 
 # General
 .DS_Store
