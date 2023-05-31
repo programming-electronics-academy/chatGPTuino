@@ -402,7 +402,6 @@ void displayResponse(states* pState, int* pDisplayOffset, int* pMsgCount) {
       // Start index can never be negative
       if (startIdx < 0) {
         startIdx = 0;
-        // *pDisplayOffset = *pDisplayOffset + 1;
         (*pDisplayOffset)++;  // Negates an up arrow press in case user keeps pressing up arrow when already
                               // at the beginning of a message so displayOffset will not accumulate presses
       }
