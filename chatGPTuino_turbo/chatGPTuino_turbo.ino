@@ -11,7 +11,7 @@
 
 #include "secrets.h"  // Network name, password, and private API key
 // #include "credentials.h"  // Network name, password, and private API key
-#include "bitmaps.h"      // Images shown on screen
+#include "bitmaps.h"  // Images shown on screen
 
 #define DEBUG
 //#define DEBUG_SERVER_RESPONSE_BREAKING
@@ -55,16 +55,14 @@ const char* rootCACertificate =
 #define SCREEN_HEIGHT 64
 #define SCREEN_WIDTH 128
 
-/*
-  Font selection is made in setup().  
-  For the most part, FONT_WIDTH and FONT_HEIGHT can match the designated font size.
-  However, these can be tuned to "scrunch in" more viewable lines for your given OLED size. */
+/* Font selection is made in setup().  
+   For the most part, FONT_WIDTH and FONT_HEIGHT can match the designated font size.
+   However, these can be tuned to "scrunch in" more viewable lines for your given OLED size. */
 #define FONT_WIDTH 6
 #define FONT_HEIGHT 13
 
-/*
-  These constants are used extensively in the displaying of text input and response.
-  Adjust at your own peril. */
+/* These constants are used extensively in the displaying of text input and response.
+   Adjust at your own peril. */
 #define MAX_CHAR_PER_OLED_ROW (SCREEN_WIDTH / FONT_WIDTH)
 #define MAX_OLED_ROWS (SCREEN_HEIGHT / FONT_HEIGHT)
 #define MAX_CHARS_ON_SCREEN (MAX_CHAR_PER_OLED_ROW * MAX_OLED_ROWS)
@@ -95,9 +93,9 @@ const char DeserializeFailMsg[ANIMATION_MSG_LENGTH] = "I'm a bit scrambled.";
 /*************** System States **************
   The different states the program can be in. */
 enum states { GET_USER_INPUT,    // When a user is typing, diplay input on OLED
-              GET_REPONSE,       // Send a POST call to the Open AI API with user input
+              GET_RESPONSE,      // Send a POST call to the Open AI API with user input
               DISPLAY_RESPONSE,  // Display the assistant response on the OLED
-              REVIEW_REPONSE,    // Scroll up and down the assistant response
+              REVIEW_RESPONSE,   // Scroll up and down the assistant response
               UPDATE_SYS_MSG };  // User input to change the system message
 
 /*************** Roles **************
@@ -339,6 +337,85 @@ void displayFace(long displayTime, const char displayMessage[], long delayInterv
   }
 }
 
+
+/*
+ * Function:  displayResponse
+ * -------------------------
+ * Displays the reponse from openAPI to the OLED.
+ * 
+ * states* pState: current state
+ * int* pDisplayOffset: 
+ * int* pMsgCount:
+ * 
+ * returns: void
+*/
+void displayResponse(states* pState, int* pDisplayOffset, int* pMsgCount) {
+
+  if (*pState == DISPLAY_RESPONSE || *pState == REVIEW_RESPONSE) {
+
+    Serial.println("|- Print Response -------------------------------|");
+
+    /*  Determine the most recent message index - recall, the most recent message IS NOT always
+    the latest element in the messages[] array. */
+    int responseIdx = (*pMsgCount % MAX_MESSAGES) - 1 < 0  // Check if you've reached the last index
+                        ? MAX_MESSAGES - 1                 // If so, we'll want to print the last index
+                        : *pMsgCount % MAX_MESSAGES - 1;   // Otherwise, circle back
+
+    /* Calculate the start and end display indices for the response and for  "response scrubbing" 
+    (ie, when the user presses up and down arrows to look through response on OLED) */
+    int startIdx;
+    int endIdx;
+
+    /*  Prepare start and stop indexes to display a new response one word at a time.  If the number of text lines
+    exceeds the available space, we'll shift all the text up one row as we keep displaying. */
+    if (*pState == DISPLAY_RESPONSE) {
+
+      startIdx = 0;
+      endIdx = responseLength;
+
+      // Reset display offset every time a new message is received
+      *pDisplayOffset = 0;
+
+      /*  Prepare start and stop indexes if the user is reviewing the response with up and down arrows.
+      This means the reponse was long and the total number of text lines exceeded
+      the aviable space to show on the screen. */
+    } else if (*pState == REVIEW_RESPONSE) {
+
+      // How many spaces are needed to complete the last row
+      byte spacesToCompleteLastRow = MAX_CHAR_PER_OLED_ROW - responseLength % MAX_CHAR_PER_OLED_ROW;
+
+      // Count full rows of text in response
+      int fullRowsOfText = (responseLength + spacesToCompleteLastRow) / MAX_CHAR_PER_OLED_ROW;  // This should always be a whole number
+
+      // Calculate index at the end of the last row in response
+      int endFrameLastIdx = (fullRowsOfText * MAX_CHAR_PER_OLED_ROW);
+
+      // Calculate the first index in the "End of Respone 'Frame'"
+      int endFrameFirstIdx = endFrameLastIdx - MAX_CHARS_ON_SCREEN;
+
+      // Calculate display adjustment due to up/down arrow presses
+      int scrubAdj = *pDisplayOffset * MAX_CHAR_PER_OLED_ROW;
+
+      // Determine start/ end indices
+      startIdx = endFrameFirstIdx + scrubAdj;
+
+      // Start index can never be negative
+      if (startIdx < 0) {
+        startIdx = 0;
+        // *pDisplayOffset = *pDisplayOffset + 1;
+        (*pDisplayOffset)++;  // Negates an up arrow press in case user keeps pressing up arrow when already
+                              // at the beginning of a message so displayOffset will not accumulate presses
+      }
+
+      endIdx = startIdx + MAX_CHARS_ON_SCREEN - 1;
+    }
+
+    // Display message
+    displayMsg(messages[responseIdx].content, endIdx, startIdx, *pState == DISPLAY_RESPONSE ? true : false);
+    *pState = GET_USER_INPUT;  // Prepare for new user input
+  }
+}
+
 /*************************************************************************/
 /*******   SETUP    ******************************************************/
 /*************************************************************************/
@@ -463,7 +540,7 @@ void loop(void) {
               msgPtr->role = user;
               msgCount++;
               inputIdx = 0;  // Reset Input Index for next response
-              state = GET_REPONSE;
+              state = GET_RESPONSE;
             } else {
               /* User pressed enter with no text entered, this can happen easily if a user presses 
               Enter/Return after the response is shown, thinking they need to clear the display with enter. */
@@ -530,9 +607,9 @@ void loop(void) {
         /* Up and down arrow keys are used when the user is reviewing a long response. */
         case PS2_KEY_UP_ARROW:
 
-          if (inputIdx == 0) {       // Ensure user is not typing a new message (maybe they pressed arrow key by accident)
-            displayOffset--;         // Move the display index back one line
-            state = REVIEW_REPONSE;  // Make sure the change is displayed on the screen
+          if (inputIdx == 0) {        // Ensure user is not typing a new message (maybe they pressed arrow key by accident)
+            displayOffset--;          // Move the display index back one line
+            state = REVIEW_RESPONSE;  // Make sure the change is displayed on the screen
           }
 
           Serial.println("KeyPressed-> Up Arrow");
@@ -549,7 +626,7 @@ void loop(void) {
               displayOffset = 0;      // so you can't move below that.
             }
 
-            state = REVIEW_REPONSE;  // Make sure the change is displayed on the screen
+            state = REVIEW_RESPONSE;  // Make sure the change is displayed on the screen
           }
 
           Serial.println("KeyPressed-> Down Arrow");
@@ -594,7 +671,7 @@ void loop(void) {
   /***************************************************************************/
   /*********** GET RESPONSE FROM OPEN_AI *************************************/
   /***************************************************************************/
-  if (state == GET_REPONSE) {
+  if (state == GET_RESPONSE) {
 
     Serial.println("|- Start API Call -------------------------------|");
     Serial.print("    | msgCount->");
@@ -788,9 +865,14 @@ but no more.  So make sure you only use this when debugging server response issu
   }
 
   /***************************************************************************/
-  /***** Print Response ******************************************************/
+  /***** Display Response ******************************************************/
   /***************************************************************************/
-  if (state == DISPLAY_RESPONSE || state == REVIEW_REPONSE) {
+  // New Function
+  displayResponse(&state, &displayOffset, &msgCount);
+
+#ifdef REFACTOR
+  // Old Code
+  if (state == DISPLAY_RESPONSE || state == REVIEW_RESPONSE) {
 
     Serial.println("|- Print Response -------------------------------|");
 
@@ -818,7 +900,7 @@ but no more.  So make sure you only use this when debugging server response issu
       /*  Prepare start and stop indexes if the user is reviewing the response with up and down arrows.
       This means the reponse was long and the total number of text lines exceeded
       the aviable space to show on the screen. */
-    } else if (state == REVIEW_REPONSE) {
+    } else if (state == REVIEW_RESPONSE) {
 
       // How many spaces are needed to complete the last row
       byte spacesToCompleteLastRow = MAX_CHAR_PER_OLED_ROW - responseLength % MAX_CHAR_PER_OLED_ROW;
@@ -852,4 +934,5 @@ but no more.  So make sure you only use this when debugging server response issu
     displayMsg(messages[responseIdx].content, endIdx, startIdx, state == DISPLAY_RESPONSE ? true : false);
     state = GET_USER_INPUT;  // Prepare for new user input
   }
+#endif
 }
