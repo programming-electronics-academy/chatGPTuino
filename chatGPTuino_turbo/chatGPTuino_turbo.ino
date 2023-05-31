@@ -9,7 +9,8 @@
 #include <PS2KeyMap.h>       // Keyboard input mapping
 // If you want to add more special key functionality, use these key constants -> https://github.com/techpaul/PS2KeyAdvanced/blob/master/src/PS2KeyAdvanced.h
 
-#include "credentials.h"  // Network name, password, and private API key
+#include "secrets.h"  // Network name, password, and private API key
+// #include "credentials.h"  // Network name, password, and private API key
 #include "bitmaps.h"      // Images shown on screen
 
 #define DEBUG
@@ -71,18 +72,18 @@ const char* rootCACertificate =
 /*************** Alert Messages ***************
   Messages dispayed to user for informational purposes. */
 #define ALERT_MSG_LENGTH 70
-const char SYSTEM_MSG_UPDATE_INITIATE_ALERT[ALERT_MSG_LENGTH] = "Enter new system message.";
-const char SYSTEM_MSG_UPDATE_SUCCESS_ALERT[ALERT_MSG_LENGTH] = "System message updated! Start typing to ask next question.";
-const char WELCOME_INSTRUCTIONS_ALERT[ALERT_MSG_LENGTH] = "Start typing to chat.";
+const char SystemMsgUpdateInitiateAlert[ALERT_MSG_LENGTH] = "Enter new system message.";
+const char SystemMsgUpdateSuccessAlert[ALERT_MSG_LENGTH] = "System message updated! Start typing to ask next question.";
+const char WelcomeInstructionsAlert[ALERT_MSG_LENGTH] = "Start typing to chat.";
 
 /*************** Animation Messages ***************
   Messages dispayed below face animation. */
 #define ANIMATION_MSG_LENGTH (MAX_CHAR_PER_OLED_ROW + 1)
-const char BOOT_SCREEN_MSG[ANIMATION_MSG_LENGTH] = "Hi. I'm chatGPTuino.";
-const char WAITING_FOR_API_RESPONSE_MSG[ANIMATION_MSG_LENGTH] = "Thinking...";
-const char API_RESPONSE_FAIL_MSG[ANIMATION_MSG_LENGTH] = "Brain freeze, 1 sec";
-const char SERVER_CONNECTION_FAIL_MSG[ANIMATION_MSG_LENGTH] = "Contemplating...";
-const char DESERIALIZE_FAIL_MSG[ANIMATION_MSG_LENGTH] = "I'm a bit scrambled.";
+const char BootScreenMsg[ANIMATION_MSG_LENGTH] = "Hi. I'm chatGPTuino.";
+const char WaitingForApiResponseMsg[ANIMATION_MSG_LENGTH] = "Thinking...";
+const char ApiResponseFailMsg[ANIMATION_MSG_LENGTH] = "Brain freeze, 1 sec";
+const char ServerConnectionFailMsg[ANIMATION_MSG_LENGTH] = "Contemplating...";
+const char DeserializeFailMsg[ANIMATION_MSG_LENGTH] = "I'm a bit scrambled.";
 
 /* These correspond to the messages above, and define the milliseconds each will show. */
 #define BOOT_ALERT_INTERVAL (3 * 1000)
@@ -90,14 +91,6 @@ const char DESERIALIZE_FAIL_MSG[ANIMATION_MSG_LENGTH] = "I'm a bit scrambled.";
 #define API_RESPONSE_FAIL_INTERVAL (2 * 1000)
 #define SERVER_CONNECTION_FAIL_INTERVAL (2 * 1000)
 #define DESERIALIZE_FAIL_INTERVAL (2 * 1000)
-
-/******** STEVE QUESTION 1 ********
-  I made the above character arrays constant, because they are never intended to change.
-  However, the display function (displayMsg()) that handles displaying ALL messages (Not just these const alert messages)
-  does not take a const char array[], but just a char array[].  
-  
-  So what I have done is everytime I pass these above arrays into the displayMsg function I cast them
-  as (char *)SYSTEM_MSG_ALERT.  I'm not sure if this is bad practice or not. */
 
 /*************** System States **************
   The different states the program can be in. */
@@ -160,11 +153,6 @@ to help you calculate a size:
 Also included with this repo is a text file with sample JSON data to 
 play around with sizing.*/
 #define DYNAMIC_JSON_DOC_SERIALIZE_SIZE 12288  // bytes
-
-/******** STEVE QUESTION 3 ********
-For some reason I am intimidated by determing memory available on a given board for 
-things like constants, globals, heap, stack, etc.  Not sure what my deal is.
-*/
 
 /*************************************************************************/
 /*******  GLOBALS  ******************************************************/
@@ -385,8 +373,8 @@ void setup(void) {
   u8g2.setFont(u8g2_font_6x13_tf);  //https://github.com/olikraus/u8g2/wiki/fntlist12
 
   // Show a face and message, and then instructions.
-  displayFace(BOOT_ALERT_INTERVAL, BOOT_SCREEN_MSG);
-  displayMsg((char*)WELCOME_INSTRUCTIONS_ALERT, ALERT_MSG_LENGTH);
+  displayFace(BOOT_ALERT_INTERVAL, BootScreenMsg);
+  displayMsg((char*)WelcomeInstructionsAlert, ALERT_MSG_LENGTH);
 
   Serial.println("...Setup Ended");
 }
@@ -488,7 +476,7 @@ void loop(void) {
           } else if (state == UPDATE_SYS_MSG) {
 
             msgPtr->role = sys;  // New system message has been added, update the message role
-            displayMsg((char*)SYSTEM_MSG_UPDATE_SUCCESS_ALERT, ALERT_MSG_LENGTH);
+            displayMsg((char*)SystemMsgUpdateSuccessAlert, ALERT_MSG_LENGTH);
 
             state = GET_USER_INPUT;
             bufferChange = false;  // Do not update display
@@ -529,7 +517,7 @@ void loop(void) {
 
         /* The Escape key changes allows the user to enter a new system message. */
         case PS2_KEY_ESC:
-          displayMsg((char*)SYSTEM_MSG_UPDATE_INITIATE_ALERT, ALERT_MSG_LENGTH);
+          displayMsg((char*)SystemMsgUpdateInitiateAlert, ALERT_MSG_LENGTH);
           state = UPDATE_SYS_MSG;
           inputIdx = 0;
           bufferChange = false;  // Do not update display
@@ -575,13 +563,7 @@ void loop(void) {
 
             /* Clear all the previous data in the message content pointed to by msgPtr. */
             memset(msgPtr->content, 0, MAX_MESSAGE_LENGTH);
-            /******** STEVE QUESTION 2 *******
-            I'm not sure how to ask this question yet, so this is a reminder for me to formulate it better.
-            I am using memset, not because it displays vestiages of over written data, but becuase it sends
-            the vestiges of overwritten data to the API.
 
-            I know this happens with the system message.  Maybe is does not happen with the others? 
-            */
             inputIdx = 0;        // Return index to 0 for new message
             clearInput = false;  // Reset flag
 
@@ -657,16 +639,6 @@ void loop(void) {
     /* Copy all message(s) from messages[] to messagesJSON[].
     Additionally, inject the system message prior to the most recent message sent.
     'i' is used to index messagesJSON[], and 'oldestMsgIdx' is used to index messages[]  */
-
-    /******** STEVE QUESTION 5 ********
-    Below I set a JSON array element equal to the "content" member of a message struct.
-    This works (i.e. The text saved in the struct is being brought over to the JSON Array),
-    but for some reason I feel like it shouldn't...
-
-    I guess the statment "systemMessage.content" is not a pointer.     
-    Is what I'm doing below something not advised?     
-    */
-
     for (int i = 0; i < msgCount && i < MAX_MESSAGES; i++) {
 
       // Inject system message before most recent message
@@ -728,7 +700,7 @@ but no more.  So make sure you only use this when debugging server response issu
 
       while (client.available() == 0) {
         // While waiting, show a face animation.
-        displayFace(WAITING_FOR_API_RESPONSE_INTERVAL, WAITING_FOR_API_RESPONSE_MSG);
+        displayFace(WAITING_FOR_API_RESPONSE_INTERVAL, WaitingForApiResponseMsg);
 
         /* If you've been waiting too long, perhaps something went wrong,
         break out and try again. */
@@ -759,7 +731,7 @@ but no more.  So make sure you only use this when debugging server response issu
         // If deserialization fails, exit immediately and try again.
         if (error) {
 
-          displayFace(DESERIALIZE_FAIL_INTERVAL, DESERIALIZE_FAIL_MSG);
+          displayFace(DESERIALIZE_FAIL_INTERVAL, DeserializeFailMsg);
           client.stop();
 
           Serial.print("    | deserializeJson() failed->");
@@ -794,13 +766,13 @@ but no more.  So make sure you only use this when debugging server response issu
 
       } else {
         // Server did not responsd to POST request, go through loop and try again.
-        displayFace(API_RESPONSE_FAIL_INTERVAL, API_RESPONSE_FAIL_MSG);
+        displayFace(API_RESPONSE_FAIL_INTERVAL, ApiResponseFailMsg);
         Serial.println("    | Server did not respond. Trying again.");
       }
 
     } else {
       // Failed to connect to server, go through loop and try again.
-      displayFace(SERVER_CONNECTION_FAIL_INTERVAL, SERVER_CONNECTION_FAIL_MSG);
+      displayFace(SERVER_CONNECTION_FAIL_INTERVAL, ServerConnectionFailMsg);
       Serial.println("    | Could not connect to server. Trying again.");
     }
 
