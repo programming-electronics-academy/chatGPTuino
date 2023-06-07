@@ -514,6 +514,40 @@ DynamicJsonDocument generateJSONRequestBody(int numMessages) {
 }
 
 /*
+ * Function:  makePOSTRequest
+ * -------------------------
+ * Makes a POST request to OpenAI 
+ *
+ * DynamicJsonDocument * pJSONRequestBody: The JSON Request body to send with the POST
+ * WiFiClientSecure * pClient: The wifi object handling the sending
+ *
+ * returns: void
+ */
+void makePOSTRequest(DynamicJsonDocument* pJSONRequestBody, WiFiClientSecure* pClient) {
+
+  Serial.println("    | Connected to OpenAI");
+  // Make request
+  pClient->println("POST https://api.openai.com/v1/chat/completions HTTP/1.1");
+  // Send headers
+  pClient->print("Host: ");
+  pClient->println(server);
+  pClient->println("Content-Type: application/json");
+  pClient->print("Content-Length: ");
+  pClient->println(measureJson(*pJSONRequestBody));
+  pClient->print("Authorization: Bearer ");
+  pClient->println(openAI_Private_key);
+  pClient->println("Connection: Close");
+  /* The empty println below inserts a stand-alone carriage return and newline (CRLF) 
+      which is part of the HTTP protocol following sending headers and prior to sending the body. */
+  pClient->println();
+  serializeJson(*pJSONRequestBody, *pClient);  // Serialize the JSON doc and append to client object
+  pClient->println();                          // Send the body to the server
+
+  Serial.println("    | JSON sent");
+}
+
+
+/*
  * Function:  getResponse
  * -------------------------
  * Form JSON request body and send HTTPS request to openAI.
@@ -539,35 +573,20 @@ void getResponse(states* pState, int* pMsgCount) {
     // Generate JSON Request body from messages array
     DynamicJsonDocument JSONRequestBody = generateJSONRequestBody(*pMsgCount);
 
-    int conn = client.connect(server, PORT);  // Connect to OpenAI
+    // Connect to OpenAI
+    int conn = client.connect(server, PORT);
 
     // If connection is successful, send JSON
     if (conn == 1) {
-      Serial.println("    | Connected to OpenAI");
-      // Make request
-      client.println("POST https://api.openai.com/v1/chat/completions HTTP/1.1");
-      // Send headers
-      client.print("Host: ");
-      client.println(server);
-      client.println("Content-Type: application/json");
-      client.print("Content-Length: ");
-      client.println(measureJson(JSONRequestBody));
-      client.print("Authorization: Bearer ");
-      client.println(openAI_Private_key);
-      client.println("Connection: Close");
-      /* The empty println below inserts a stand-alone carriage return and newline (CRLF) 
-      which is part of the HTTP protocol following sending headers and prior to sending the body. */
-      client.println();
-      serializeJson(JSONRequestBody, client);  // Serialize the JSON doc and append to client object
-      client.println();            // Send the body to the server
+      // Send JSON Request body to OpenAI API endpoint URL
+      makePOSTRequest(&JSONRequestBody, &client);
 
-      Serial.println("    | JSON sent");
-
-/* Seeing the headers of the server response can be extremely useful to troubleshooting
-connection errors.  However, this readout of the server response header breaks 
-how the message is parsed from the response.  So you'll be able to send and receive one message,
-but no more.  So make sure you only use this when debugging server response issues. */
 #ifdef DEBUG_SERVER_RESPONSE_BREAKING
+      /* Seeing the headers of the server response can be extremely useful to troubleshooting
+      connection errors.  However, this readout of the server response header breaks 
+      how the message is parsed from the response.  So you'll be able to send and receive one message,
+      but no more.  So make sure you only use this when debugging server response issues. */
+
       String line = client.readStringUntil('X');
       Serial.print(line);
 #endif
