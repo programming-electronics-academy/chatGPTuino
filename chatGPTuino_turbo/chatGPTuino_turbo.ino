@@ -344,8 +344,8 @@ void displayFace(long displayTime, const char displayMessage[], long delayInterv
  * Displays the reponse from openAPI to the OLED.
  * 
  * states* pState: current state
- * int* pDisplayOffset: 
- * int* pMsgCount:
+ * int* pDisplayOffset: used for adjusting which line of text to display first
+ * int* pMsgCount: current number of messages in message array
  * 
  * returns: void
 */
@@ -412,6 +412,239 @@ void displayResponse(states* pState, int* pDisplayOffset, int* pMsgCount) {
     // Display message
     displayMsg(messages[responseIdx].content, endIdx, startIdx, *pState == DISPLAY_RESPONSE ? true : false);
     *pState = GET_USER_INPUT;  // Prepare for new user input
+  }
+}
+
+/*
+ * Function:  printToConsoleMessageArray
+ * -------------------------
+ * Prints all contents of the messages array to the console,
+ * as well as the length of characters of the most recent reponse.
+ *
+ * returns: void
+ */
+void printToConsoleMessageArray() {
+
+  Serial.println("    |------------------- Messages[] --------------------");
+
+  for (int i = 0; i < MAX_MESSAGES; i++) {
+    Serial.print("    | ");
+    Serial.print(i);
+    Serial.print(" - ");
+    Serial.println(messages[i].content);
+  }
+
+  Serial.print("    | Size of most recent reponse -> ");
+  Serial.println(responseLength);
+  Serial.println("    |----------------------------------------------------");
+}
+
+
+/*
+ * Function:  generateJSONRequestBody
+ * -------------------------
+ * Creates a JSON formatted object of all the messages 
+ * in the messages array.  It all inserts the system message into 
+ * this JSON object prior to the most recent message.
+ *
+ * int numMessages:  Number of messages in the messages array
+ *
+ * returns: DynamicJsonDocument
+ */
+DynamicJsonDocument generateJSONRequestBody(int numMessages) {
+
+  // Generate the JSON document that will be sent to OpenAI.
+  DynamicJsonDocument doc(DYNAMIC_JSON_DOC_SERIALIZE_SIZE);
+
+  // Add static parameters that get sent with all messages https://platform.openai.com/docs/api-reference/chat/create
+  doc["model"] = "gpt-3.5-turbo";  // Current model, will soon be gpt-4...
+  doc["max_tokens"] = MAX_TOKENS;
+
+  // Create nested array that will hold all the system, user, and assistant messages
+  JsonArray messagesJSON = doc.createNestedArray("messages");
+
+  /* Our array messages[] is used like a circular buffer.  
+    If the size of messages[] is 10, and we add an 11th message, 
+    then messages[0] is replaced with the 11th message. 
+      
+    This means that messages[0] may hold a message that is newer 
+    (more recent chronologically) than messages[1].
+      
+    When we send the messages to OpenAI, the messages need to be in order
+    from oldest to newest.  So messagesJSON[0], DOES NOT always map to
+    messages[0].  In the case above, messagesJSON[0] would equal messages[1]
+    since messages[1] was the oldest message sent.
+
+    To maintain this chronological mapping from messages[] to messagesJSON[]
+    we introduce a new index. */
+  int oldestMsgIdx = 0;
+
+  /* If the total number of messages sent between user 
+    and agent exceeds the max, circle back around. */
+  if (numMessages >= MAX_MESSAGES) {
+    oldestMsgIdx = numMessages % MAX_MESSAGES;
+  }
+
+  /* Copy all message(s) from messages[] to messagesJSON[].
+    Additionally, inject the system message prior to the most recent message sent.
+    'i' is used to index messagesJSON[], and 'oldestMsgIdx' is used to index messages[]  */
+  for (int i = 0; i < numMessages && i < MAX_MESSAGES; i++) {
+
+    // Inject system message before most recent message
+    if (i == numMessages - 1 || i == MAX_MESSAGES - 1) {
+      messagesJSON[i]["role"] = roleNames[systemMessage.role];
+      messagesJSON[i]["content"] = systemMessage.content;
+      i++;
+    }
+
+    messagesJSON[i]["role"] = roleNames[messages[oldestMsgIdx].role];
+    messagesJSON[i]["content"] = messages[oldestMsgIdx].content;
+
+    oldestMsgIdx++;
+    oldestMsgIdx %= MAX_MESSAGES;
+  }
+
+#ifdef DEBUG
+  Serial.println("    | JSON to be sent:");
+  serializeJsonPretty(doc, Serial);
+  Serial.println("");
+#endif
+
+  return doc;
+}
+
+/*
+ * Function:  getResponse
+ * -------------------------
+ * Form JSON request body and send HTTPS request to openAI.
+ * Parse the reponse. Update messages array with new response.
+ *  
+ * states* pState: current state
+ * int* pMsgCount: current number of messages in message array
+ *
+ * returns: void
+ */
+void getResponse(states* pState, int* pMsgCount) {
+
+  if (*pState == GET_RESPONSE) {
+
+    Serial.println("|- Start API Call -------------------------------|");
+    Serial.print("    | msgCount->");
+    Serial.println(*pMsgCount);
+
+    // Create a secure wifi client
+    WiFiClientSecure client;
+    client.setCACert(rootCACertificate);
+
+    // Generate JSON Request body from messages array
+    DynamicJsonDocument JSONRequestBody = generateJSONRequestBody(*pMsgCount);
+
+    int conn = client.connect(server, PORT);  // Connect to OpenAI
+
+    // If connection is successful, send JSON
+    if (conn == 1) {
+      Serial.println("    | Connected to OpenAI");
+      // Make request
+      client.println("POST https://api.openai.com/v1/chat/completions HTTP/1.1");
+      // Send headers
+      client.print("Host: ");
+      client.println(server);
+      client.println("Content-Type: application/json");
+      client.print("Content-Length: ");
+      client.println(measureJson(JSONRequestBody));
+      client.print("Authorization: Bearer ");
+      client.println(openAI_Private_key);
+      client.println("Connection: Close");
+      /* The empty println below inserts a stand-alone carriage return and newline (CRLF) 
+      which is part of the HTTP protocol following sending headers and prior to sending the body. */
+      client.println();
+      serializeJson(JSONRequestBody, client);  // Serialize the JSON doc and append to client object
+      client.println();            // Send the body to the server
+
+      Serial.println("    | JSON sent");
+
+/* Seeing the headers of the server response can be extremely useful to troubleshooting
+connection errors.  However, this readout of the server response header breaks 
+how the message is parsed from the response.  So you'll be able to send and receive one message,
+but no more.  So make sure you only use this when debugging server response issues. */
+#ifdef DEBUG_SERVER_RESPONSE_BREAKING
+      String line = client.readStringUntil('X');
+      Serial.print(line);
+#endif
+
+      //  Wait for OpenAI response
+      bool responseSuccess = true;    // Flag that triggers parsing and copying reponse
+      long startWaitTime = millis();  // Measure how long it takes
+
+      while (client.available() == 0) {
+        // While waiting, show a face animation.
+        displayFace(WAITING_FOR_API_RESPONSE_INTERVAL, WaitingForApiResponseMsg);
+
+        /* If you've been waiting too long, perhaps something went wrong,
+        break out and try again. */
+        if (millis() - startWaitTime > SERVER_RESPONSE_WAIT_TIME) {
+          Serial.println("    | SERVER_RESPONSE_WAIT_TIME exceeded.");
+
+          responseSuccess = false;
+          break;
+        }
+      }
+
+      // If you receive a response, parse the JSON and copy the response to messages[]
+      if (responseSuccess) {
+
+        client.find("\r\n\r\n");  // This search get us to the body section of the http response
+
+        /* Create a filter for the returning JSON 
+        https://arduinojson.org/news/2020/03/22/version-6-15-0/ */
+        StaticJsonDocument<500> filter;
+        JsonObject filter_choices_0_message = filter["choices"][0].createNestedObject("message");
+        filter_choices_0_message["role"] = true;
+        filter_choices_0_message["content"] = true;
+
+        // Deserialize the JSON
+        StaticJsonDocument<2000> outputDoc;
+        DeserializationError error = deserializeJson(outputDoc, client, DeserializationOption::Filter(filter));
+
+        // If deserialization fails, exit immediately and try again.
+        if (error) {
+
+          displayFace(DESERIALIZE_FAIL_INTERVAL, DeserializeFailMsg);
+          client.stop();
+
+          Serial.print("    | deserializeJson() failed->");
+          Serial.println(error.c_str());
+
+          return;
+        }
+
+        // Update messages[] with new message details
+        messages[*pMsgCount % MAX_MESSAGES].role = assistant;                                                                             // Assign incoming message role as 'assistant'
+        strncpy(messages[*pMsgCount % MAX_MESSAGES].content, outputDoc["choices"][0]["message"]["content"] | "...", MAX_MESSAGE_LENGTH);  // Copy content
+
+        // Measure the length of the response
+        responseLength = measureJson(outputDoc["choices"][0]["message"]["content"]);
+        (*pMsgCount)++;              // We successfully received and saved a new message
+        *pState = DISPLAY_RESPONSE;  // Now display response
+
+#ifdef DEBUG
+        printToConsoleMessageArray();
+#endif
+
+      } else {
+        // Server did not responsd to POST request, go through loop and try again.
+        displayFace(API_RESPONSE_FAIL_INTERVAL, ApiResponseFailMsg);
+        Serial.println("    | Server did not respond. Trying again.");
+      }
+
+    } else {
+      // Failed to connect to server, go through loop and try again.
+      displayFace(SERVER_CONNECTION_FAIL_INTERVAL, ServerConnectionFailMsg);
+      Serial.println("    | Could not connect to server. Trying again.");
+    }
+
+    // Disconnect from server after response received,  server timeout, or connection failure
+    client.stop();
   }
 }
 
@@ -670,6 +903,10 @@ void loop(void) {
   /***************************************************************************/
   /*********** GET RESPONSE FROM OPEN_AI *************************************/
   /***************************************************************************/
+  getResponse(&state, &msgCount);
+
+#ifdef REFACTOR
+
   if (state == GET_RESPONSE) {
 
     Serial.println("|- Start API Call -------------------------------|");
@@ -856,82 +1093,14 @@ but no more.  So make sure you only use this when debugging server response issu
     client.stop();
   }
 
-  /***************************************************************************/
-  /*********** Print User Input - Only change display for new input **********/
-  /***************************************************************************/
+#endif
+
+
+  // Display user input as it is typed
   if (bufferChange && (state == GET_USER_INPUT || state == UPDATE_SYS_MSG)) {
     displayMsg(msgPtr->content, inputIdx);
   }
 
-  /***************************************************************************/
-  /***** Display Response ******************************************************/
-  /***************************************************************************/
-  // New Function
+  // Display Response
   displayResponse(&state, &displayOffset, &msgCount);
-
-#ifdef REFACTOR
-  // Old Code
-  if (state == DISPLAY_RESPONSE || state == REVIEW_RESPONSE) {
-
-    Serial.println("|- Print Response -------------------------------|");
-
-    /*  Determine the most recent message index - recall, the most recent message IS NOT always
-    the latest element in the messages[] array. */
-    int responseIdx = (msgCount % MAX_MESSAGES) - 1 < 0  // Check if you've reached the last index
-                        ? MAX_MESSAGES - 1               // If so, we'll want to print the last index
-                        : msgCount % MAX_MESSAGES - 1;   // Otherwise, circle back
-
-    /* Calculate the start and end display indices for the response and for  "response scrubbing" 
-    (ie, when the user presses up and down arrows to look through response on OLED) */
-    int startIdx;
-    int endIdx;
-
-    /*  Prepare start and stop indexes to display a new response one word at a time.  If the number of text lines
-    exceeds the available space, we'll shift all the text up one row as we keep displaying. */
-    if (state == DISPLAY_RESPONSE) {
-
-      startIdx = 0;
-      endIdx = responseLength;
-
-      // Reset display offset every time a new message is revieced
-      displayOffset = 0;
-
-      /*  Prepare start and stop indexes if the user is reviewing the response with up and down arrows.
-      This means the reponse was long and the total number of text lines exceeded
-      the aviable space to show on the screen. */
-    } else if (state == REVIEW_RESPONSE) {
-
-      // How many spaces are needed to complete the last row
-      byte spacesToCompleteLastRow = MAX_CHAR_PER_OLED_ROW - responseLength % MAX_CHAR_PER_OLED_ROW;
-
-      // Count full rows of text in response
-      int fullRowsOfText = (responseLength + spacesToCompleteLastRow) / MAX_CHAR_PER_OLED_ROW;  // This should always be a whole number
-
-      // Calculate index at the end of the last row in response
-      int endFrameLastIdx = (fullRowsOfText * MAX_CHAR_PER_OLED_ROW);
-
-      // Calculate the first index in the "End of Respone 'Frame'"
-      int endFrameFirstIdx = endFrameLastIdx - MAX_CHARS_ON_SCREEN;
-
-      // Calculate display adjustment due to up/down arrow presses
-      int scrubAdj = displayOffset * MAX_CHAR_PER_OLED_ROW;
-
-      // Determine start/ end indices
-      startIdx = endFrameFirstIdx + scrubAdj;
-
-      // Start index can never be negative
-      if (startIdx < 0) {
-        startIdx = 0;
-        displayOffset++;  // Negates an up arrow press in case user keeps pressing up arrow when already
-                          // at the beginning of a message so displayOffset will not accumulate presses
-      }
-
-      endIdx = startIdx + MAX_CHARS_ON_SCREEN - 1;
-    }
-
-    // Display message
-    displayMsg(messages[responseIdx].content, endIdx, startIdx, state == DISPLAY_RESPONSE ? true : false);
-    state = GET_USER_INPUT;  // Prepare for new user input
-  }
-#endif
 }
