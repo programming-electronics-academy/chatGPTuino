@@ -451,7 +451,7 @@ void printToConsoleMessageArray() {
  *
  * returns: DynamicJsonDocument
  */
-DynamicJsonDocument generateJSONRequestBody(int numMessages) {
+DynamicJsonDocument generateJsonRequestBody(int numMessages) {
 
   // Generate the JSON document that will be sent to OpenAI.
   DynamicJsonDocument doc(DYNAMIC_JSON_DOC_SERIALIZE_SIZE);
@@ -514,7 +514,7 @@ DynamicJsonDocument generateJSONRequestBody(int numMessages) {
 }
 
 /*
- * Function:  makePOSTRequest
+ * Function:  postRequest
  * -------------------------
  * Makes a POST request to OpenAI 
  *
@@ -523,7 +523,7 @@ DynamicJsonDocument generateJSONRequestBody(int numMessages) {
  *
  * returns: void
  */
-void makePOSTRequest(DynamicJsonDocument* pJSONRequestBody, WiFiClientSecure* pClient) {
+void postRequest(DynamicJsonDocument* pJsonRequestBody, WiFiClientSecure* pClient) {
 
   Serial.println("    | Connected to OpenAI");
   // Make request
@@ -533,17 +533,64 @@ void makePOSTRequest(DynamicJsonDocument* pJSONRequestBody, WiFiClientSecure* pC
   pClient->println(server);
   pClient->println("Content-Type: application/json");
   pClient->print("Content-Length: ");
-  pClient->println(measureJson(*pJSONRequestBody));
+  pClient->println(measureJson(*pJsonRequestBody));
   pClient->print("Authorization: Bearer ");
   pClient->println(openAI_Private_key);
   pClient->println("Connection: Close");
   /* The empty println below inserts a stand-alone carriage return and newline (CRLF) 
       which is part of the HTTP protocol following sending headers and prior to sending the body. */
   pClient->println();
-  serializeJson(*pJSONRequestBody, *pClient);  // Serialize the JSON doc and append to client object
+  serializeJson(*pJsonRequestBody, *pClient);  // Serialize the JSON doc and append to client object
   pClient->println();                          // Send the body to the server
 
   Serial.println("    | JSON sent");
+}
+
+/*
+ * Function:  putResponseInMsgArray
+ * -------------------------
+ * Applies filter to JSON reponse and saves response to messages array. 
+ *
+ * WiFiClientSecure * pClient: The wifi object handling the response
+ * int numMessages:  Number of messages in the messages array
+ *
+ * returns: bool - 0 for failure to extract JSON, 1 for success
+ */
+bool putResponseInMsgArray(WiFiClientSecure* pClient, int numMessages) {
+
+  pClient->find("\r\n\r\n");  // This search gets us to the body section of the http response
+
+  /* Create a filter for the returning JSON 
+        https://arduinojson.org/news/2020/03/22/version-6-15-0/ */
+  StaticJsonDocument<500> filter;
+  JsonObject filter_choices_0_message = filter["choices"][0].createNestedObject("message");
+  filter_choices_0_message["role"] = true;
+  filter_choices_0_message["content"] = true;
+
+  // Deserialize the JSON
+  StaticJsonDocument<2000> jsonResponse;
+  DeserializationError error = deserializeJson(jsonResponse, *pClient, DeserializationOption::Filter(filter));
+
+  // If deserialization fails, exit immediately and try again.
+  if (error) {
+
+    displayFace(DESERIALIZE_FAIL_INTERVAL, DeserializeFailMsg);
+    pClient->stop();
+
+    Serial.print("    | deserializeJson() failed->");
+    Serial.println(error.c_str());
+
+    return 0;
+  }
+
+  // Update messages[] with new message details
+  messages[numMessages % MAX_MESSAGES].role = assistant;                                                                                // Assign incoming message role as 'assistant'
+  strncpy(messages[numMessages % MAX_MESSAGES].content, jsonResponse["choices"][0]["message"]["content"] | "...", MAX_MESSAGE_LENGTH);  // Copy content
+
+  // Measure the length of the response
+  responseLength = measureJson(jsonResponse["choices"][0]["message"]["content"]);
+
+  return 1;
 }
 
 
@@ -571,7 +618,7 @@ void getResponse(states* pState, int* pMsgCount) {
     client.setCACert(rootCACertificate);
 
     // Generate JSON Request body from messages array
-    DynamicJsonDocument JSONRequestBody = generateJSONRequestBody(*pMsgCount);
+    DynamicJsonDocument jsonRequestBody = generateJsonRequestBody(*pMsgCount);
 
     // Connect to OpenAI
     int conn = client.connect(server, PORT);
@@ -579,7 +626,7 @@ void getResponse(states* pState, int* pMsgCount) {
     // If connection is successful, send JSON
     if (conn == 1) {
       // Send JSON Request body to OpenAI API endpoint URL
-      makePOSTRequest(&JSONRequestBody, &client);
+      postRequest(&jsonRequestBody, &client);
 
 #ifdef DEBUG_SERVER_RESPONSE_BREAKING
       /* Seeing the headers of the server response can be extremely useful to troubleshooting
@@ -611,40 +658,19 @@ void getResponse(states* pState, int* pMsgCount) {
 
       // If you receive a response, parse the JSON and copy the response to messages[]
       if (responseSuccess) {
+        
+        bool responseSaved = putResponseInMsgArray(&client, *pMsgCount);
 
-        client.find("\r\n\r\n");  // This search get us to the body section of the http response
+        if(responseSaved) {
 
-        /* Create a filter for the returning JSON 
-        https://arduinojson.org/news/2020/03/22/version-6-15-0/ */
-        StaticJsonDocument<500> filter;
-        JsonObject filter_choices_0_message = filter["choices"][0].createNestedObject("message");
-        filter_choices_0_message["role"] = true;
-        filter_choices_0_message["content"] = true;
+          (*pMsgCount)++;              // We successfully received and saved a new message
+          *pState = DISPLAY_RESPONSE;  // Now display response
 
-        // Deserialize the JSON
-        StaticJsonDocument<2000> outputDoc;
-        DeserializationError error = deserializeJson(outputDoc, client, DeserializationOption::Filter(filter));
+        } else {
 
-        // If deserialization fails, exit immediately and try again.
-        if (error) {
-
-          displayFace(DESERIALIZE_FAIL_INTERVAL, DeserializeFailMsg);
-          client.stop();
-
-          Serial.print("    | deserializeJson() failed->");
-          Serial.println(error.c_str());
-
+          // An error occured, exit and try again
           return;
         }
-
-        // Update messages[] with new message details
-        messages[*pMsgCount % MAX_MESSAGES].role = assistant;                                                                             // Assign incoming message role as 'assistant'
-        strncpy(messages[*pMsgCount % MAX_MESSAGES].content, outputDoc["choices"][0]["message"]["content"] | "...", MAX_MESSAGE_LENGTH);  // Copy content
-
-        // Measure the length of the response
-        responseLength = measureJson(outputDoc["choices"][0]["message"]["content"]);
-        (*pMsgCount)++;              // We successfully received and saved a new message
-        *pState = DISPLAY_RESPONSE;  // Now display response
 
 #ifdef DEBUG
         printToConsoleMessageArray();
@@ -662,7 +688,7 @@ void getResponse(states* pState, int* pMsgCount) {
       Serial.println("    | Could not connect to server. Trying again.");
     }
 
-    // Disconnect from server after response received,  server timeout, or connection failure
+    // Disconnect from server after response received, server timeout, or connection failure
     client.stop();
   }
 }
