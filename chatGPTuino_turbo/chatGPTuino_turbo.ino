@@ -593,6 +593,36 @@ bool putResponseInMsgArray(WiFiClientSecure* pClient, int numMessages) {
   return 1;
 }
 
+/*
+ * Function:  waitForServerResponse
+ * -------------------------
+ * Holds program in loop while waiting for response from server.
+ * Times out after defined interval.  Displays waiting face to OLED. 
+ *
+ * WiFiClientSecure * pClient: The wifi object handling the response
+ *
+ * returns: bool - 0 for timeout, 1 for success
+ */
+bool waitForServerResponse(WiFiClientSecure* pClient) {
+
+  bool responseSuccess = true;
+  long startWaitTime = millis();  // Measure how long it takes
+
+  while (pClient->available() == 0) {
+    // While waiting, show a face animation.
+    displayFace(WAITING_FOR_API_RESPONSE_INTERVAL, WaitingForApiResponseMsg);
+
+    /* If you've been waiting too long, perhaps something went wrong,
+        break out and try again. */
+    if (millis() - startWaitTime > SERVER_RESPONSE_WAIT_TIME) {
+      Serial.println("    | SERVER_RESPONSE_WAIT_TIME exceeded.");
+      return false;
+    }
+  }
+
+  return responseSuccess;
+}
+
 
 /*
  * Function:  getResponse
@@ -639,36 +669,20 @@ void getResponse(states* pState, int* pMsgCount) {
 #endif
 
       //  Wait for OpenAI response
-      bool responseSuccess = true;    // Flag that triggers parsing and copying reponse
-      long startWaitTime = millis();  // Measure how long it takes
-
-      while (client.available() == 0) {
-        // While waiting, show a face animation.
-        displayFace(WAITING_FOR_API_RESPONSE_INTERVAL, WaitingForApiResponseMsg);
-
-        /* If you've been waiting too long, perhaps something went wrong,
-        break out and try again. */
-        if (millis() - startWaitTime > SERVER_RESPONSE_WAIT_TIME) {
-          Serial.println("    | SERVER_RESPONSE_WAIT_TIME exceeded.");
-
-          responseSuccess = false;
-          break;
-        }
-      }
+      bool responseSuccess = waitForServerResponse(&client);
 
       // If you receive a response, parse the JSON and copy the response to messages[]
       if (responseSuccess) {
-        
+
         bool responseSaved = putResponseInMsgArray(&client, *pMsgCount);
 
-        if(responseSaved) {
+        if (responseSaved) {
 
           (*pMsgCount)++;              // We successfully received and saved a new message
           *pState = DISPLAY_RESPONSE;  // Now display response
 
         } else {
-
-          // An error occured, exit and try again
+          // An error occured durring parsing, exit and try again (error message handled in parsing function)
           return;
         }
 
