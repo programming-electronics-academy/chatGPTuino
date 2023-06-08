@@ -777,18 +777,17 @@ void loop(void) {
   static int inputIdx = 0;
 
   // A flag to clear the display buffer and reset inputIdx to 0
-  static boolean clearInput = false;
+  static bool clearInput = false;
 
   /* A flag to used to ensure user input is displayed only when the 
   display buffer has been meaningfully changed */
-  boolean bufferChange = false;
+  bool bufferChange = false;
 
   /******* Response Display Control *******/
 
   /* When a user presses up and down arrows, this adjusts the index  
    of the message content to show */
   static int displayOffset = 0;
-
 
   /***************************************************************************/
   /*********** GET USER INPUT ************************************************/
@@ -816,6 +815,9 @@ void loop(void) {
       switch (base) {
 
         case PS2_KEY_ENTER:
+
+          //keypressEnter(&state, &inputIdx, &msgPtr, &msgCount, &bufferChange, &clearInput);
+
           Serial.println("KeyPressed-> Enter");
 
           /* Pressing the Enter/Return key has different effects depending on the state and whether 
