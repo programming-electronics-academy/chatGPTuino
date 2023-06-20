@@ -376,29 +376,29 @@ void displayFace(long displayTime, const char displayMessage[], long delayInterv
   }
 }
 
-
 /*
  * Function:  displayResponse
  * -------------------------
  * Displays the reponse from openAPI to the OLED.
  * 
- * states* pState: current state
- * int* pDisplayOffset: used for adjusting which line of text to display first
- * int* pMsgCount: current number of messages in message array
+ * struct StateVars * pStateVars:  struct of state variables, the members used are:
+ *        states* state: current state
+ *        int* displayOffset: used for adjusting which line of text to display first
+ *        int* msgCount: current number of messages in message array
  * 
  * returns: void
 */
-void displayResponse(States* pState, int* pDisplayOffset, int* pMsgCount) {
+void displayResponse(struct StateVars * pStateVars) {
 
-  if (*pState == DISPLAY_RESPONSE || *pState == REVIEW_RESPONSE) {
+  if (pStateVars->state == DISPLAY_RESPONSE || pStateVars->state == REVIEW_RESPONSE) {
 
     Serial.println("|- Print Response -------------------------------|");
 
     /*  Determine the most recent message index - recall, the most recent message IS NOT always
     the latest element in the messages[] array. */
-    int responseIdx = (*pMsgCount % MAX_MESSAGES) - 1 < 0  // Check if you've reached the last index
+    int responseIdx = (pStateVars->msgCount % MAX_MESSAGES) - 1 < 0  // Check if you've reached the last index
                         ? MAX_MESSAGES - 1                 // If so, we'll want to print the last index
-                        : *pMsgCount % MAX_MESSAGES - 1;   // Otherwise, circle back
+                        : pStateVars->msgCount % MAX_MESSAGES - 1;   // Otherwise, circle back
 
     /* Calculate the start and end display indices for the response and for  "response scrubbing" 
     (ie, when the user presses up and down arrows to look through response on OLED) */
@@ -407,18 +407,18 @@ void displayResponse(States* pState, int* pDisplayOffset, int* pMsgCount) {
 
     /*  Prepare start and stop indexes to display a new response one word at a time.  If the number of text lines
     exceeds the available space, we'll shift all the text up one row as we keep displaying. */
-    if (*pState == DISPLAY_RESPONSE) {
+    if (pStateVars->state == DISPLAY_RESPONSE) {
 
       startIdx = 0;
       endIdx = responseLength;
 
       // Reset display offset every time a new message is received
-      *pDisplayOffset = 0;
+      pStateVars->displayOffset = 0;
 
       /*  Prepare start and stop indexes if the user is reviewing the response with up and down arrows.
       This means the reponse was long and the total number of text lines exceeded
       the aviable space to show on the screen. */
-    } else if (*pState == REVIEW_RESPONSE) {
+    } else if (pStateVars->state == REVIEW_RESPONSE) {
 
       // How many spaces are needed to complete the last row
       byte spacesToCompleteLastRow = MAX_CHAR_PER_OLED_ROW - responseLength % MAX_CHAR_PER_OLED_ROW;
@@ -433,7 +433,7 @@ void displayResponse(States* pState, int* pDisplayOffset, int* pMsgCount) {
       int endFrameFirstIdx = endFrameLastIdx - MAX_CHARS_ON_SCREEN;
 
       // Calculate display adjustment due to up/down arrow presses
-      int scrubAdj = *pDisplayOffset * MAX_CHAR_PER_OLED_ROW;
+      int scrubAdj = pStateVars->displayOffset * MAX_CHAR_PER_OLED_ROW;
 
       // Determine start/ end indices
       startIdx = endFrameFirstIdx + scrubAdj;
@@ -441,7 +441,7 @@ void displayResponse(States* pState, int* pDisplayOffset, int* pMsgCount) {
       // Start index can never be negative
       if (startIdx < 0) {
         startIdx = 0;
-        (*pDisplayOffset)++;  // Negates an up arrow press in case user keeps pressing up arrow when already
+        (pStateVars->displayOffset)++;  // Negates an up arrow press in case user keeps pressing up arrow when already
                               // at the beginning of a message so displayOffset will not accumulate presses
       }
 
@@ -449,8 +449,8 @@ void displayResponse(States* pState, int* pDisplayOffset, int* pMsgCount) {
     }
 
     // Display message
-    displayMsg(messages[responseIdx].content, endIdx, startIdx, *pState == DISPLAY_RESPONSE ? true : false);
-    *pState = GET_USER_INPUT;  // Prepare for new user input
+    displayMsg(messages[responseIdx].content, endIdx, startIdx, pStateVars->state == DISPLAY_RESPONSE ? true : false);
+    pStateVars->state = GET_USER_INPUT;  // Prepare for new user input
   }
 }
 
@@ -974,6 +974,7 @@ void setup(void) {
 
 void loop(void) {
 
+  // this 
   static StateVars stateVars = {
     GET_USER_INPUT,  // state
     0,               // msgCount
@@ -1000,6 +1001,7 @@ void loop(void) {
   }
 
   /*********** DISPLAY AGENT RESPONSE ******************************************/
-  displayResponse(&stateVars.state, &stateVars.displayOffset, &stateVars.msgCount);
+  // displayResponse(&stateVars.state, &stateVars.displayOffset, &stateVars.msgCount);
+  displayResponse(&stateVars);
 
 }  // close void loop
