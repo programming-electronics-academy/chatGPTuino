@@ -92,11 +92,49 @@ const char DeserializeFailMsg[ANIMATION_MSG_LENGTH] = "I'm a bit scrambled.";
 
 /*************** System States **************
   The different states the program can be in. */
-enum states { GET_USER_INPUT,    // When a user is typing, diplay input on OLED
+enum States { GET_USER_INPUT,    // When a user is typing, diplay input on OLED
               GET_RESPONSE,      // Send a POST call to the Open AI API with user input
               DISPLAY_RESPONSE,  // Display the assistant response on the OLED
               REVIEW_RESPONSE,   // Scroll up and down the assistant response
               UPDATE_SYS_MSG };  // User input to change the system message
+
+
+/*************** States Variables **************
+  This struct encapusulates state variables that manage
+  the input and display. */
+struct StateVars {
+
+  // The state will determine the flow of the program
+  States state;
+
+  /*  This will count the total number of messages between the user and the agent.
+  This does not include the system message. We will use this message count 
+  to determine our index inside the messages array. */
+  int msgCount;
+
+  /* Every time a user types a character, we increment inputIdx. 
+  If user presses backspace, we decrement inputIdx. */
+  int inputIdx;
+
+  // A flag to clear the display buffer and reset inputIdx to 0
+  bool clearInput;
+
+  /* When a user presses up and down arrows, this adjusts the index  
+   of the message content to show */
+  int displayOffset;
+
+  /* A flag to used to ensure user input is displayed only when the 
+  display buffer has been meaningfully changed */
+  bool bufferChange;
+
+  /* The msgPtr is used for assigning keyboard input text to either:
+    -> the System Message or,
+    -> a User Message in the messages array
+  It is assigned based on the current state.
+  The msgPtr is also used for displaying the user keyboard input text. */
+  struct message* msgPtr;
+};
+
 
 /*************** Roles **************
   The current chatGTP API format has 3 distinct role types for each message.
@@ -111,35 +149,6 @@ enum roles { sys,  //system
              assistant };
 
 const char roleNames[3][10] = { "system", "user", "assistant" };
-
-typedef struct StateVariables {
-  states state;
-  int msgCount;
-  int inputIdx;
-  bool clearInput;
-  int displayOffset;
-  bool bufferChange;
-  struct message* msgPtr;
-} StateVariables;
-
-/* STEVE Question 1 *************
-I had been getting the "Warning: 'typedef' was ignored in this declaration"  when is used the form:
-
-typedef struct StateVariables {
-  //
-};
-
-I am tempted to just have... 
-typedef struct {
-  //
-} StateVariables;
-
-I found this thread interesting, but not sure is the guidance is solid or not...  of this is just a style issue.
-https://forum.arduino.cc/t/warning-typedef-was-ignored-in-this-declaration/1048253/8
-
-I believe at some point you mentioned that without a tag, a struct cannot have a member 
-that is also a struct of the same type (I may be making this up :) , but I am not doing that here so tempted to leave off the tag.
-*/
 
 
 /****** Tokens *******
@@ -379,7 +388,7 @@ void displayFace(long displayTime, const char displayMessage[], long delayInterv
  * 
  * returns: void
 */
-void displayResponse(states* pState, int* pDisplayOffset, int* pMsgCount) {
+void displayResponse(States* pState, int* pDisplayOffset, int* pMsgCount) {
 
   if (*pState == DISPLAY_RESPONSE || *pState == REVIEW_RESPONSE) {
 
@@ -665,7 +674,7 @@ bool waitForServerResponse(WiFiClientSecure* pClient) {
  *
  * returns: void
  */
-void getResponse(states* pState, int* pMsgCount) {
+void getResponse(States* pState, int* pMsgCount) {
 
   if (*pState == GET_RESPONSE) {
 
@@ -737,6 +746,188 @@ void getResponse(states* pState, int* pMsgCount) {
   }
 }
 
+/*
+ * Function:  getUserInput
+ * -------------------------
+ * Parse keyboard input into Command Keys (i.e. Shift, Backspace, etc) and Text
+ *    If Command Keys, execute appropriate command  
+ *    If Text, save to either messages array or systemMessage
+ *  
+ * struct StateVars* pStateVars: state variables used for managing input and display
+ *
+ * returns: void
+ */
+void getUserInput(struct StateVars* pStateVars) {
+
+  // If the user has pressed a key during an input/update state
+  if (keyboard.available() && (pStateVars->state == GET_USER_INPUT || pStateVars->state == UPDATE_SYS_MSG)) {
+
+    /* This is a 16 bit value, the 8 MSB are individual flags for functional keys (like shift, control, etc)
+    While the 8 LSB make up a unique code for the specific key that was pressed. */
+    int key = keyboard.read();
+    byte base = key & 0xff;                   // This is the 8 bit unique code for a character
+    byte remappedKey = keymap.remapKey(key);  // remapKey returns a 0 if the key is not standard ASCII/UTF-8 code.
+                                              // This is used to filter out non-display character keys, like Fn, Alt, etc
+
+    // Check if up or down arrow pressed
+    boolean arrowKeyPressed = (base == PS2_KEY_UP_ARROW) || (base == PS2_KEY_DN_ARROW);
+
+    // Printable and Select Command Keys
+    if (remappedKey > 0 || arrowKeyPressed) {
+
+      // Signals the downstream print function to re-display buffer
+      pStateVars->bufferChange = true;
+
+      switch (base) {
+
+        case PS2_KEY_ENTER:
+
+          //keypressEnter(&state, &inputIdx, &msgPtr, &msgCount, &bufferChange, &clearInput);
+
+          Serial.println("KeyPressed-> Enter");
+
+          /* Pressing the Enter/Return key has different effects depending on the state and whether 
+          the user has input any text yet or not.
+
+          state          |  Major Action
+          GET_USER_INPUT |  Change state to GET_RESPONSE, set msg role as 'user'
+          UPDATE_SYS_MSG |  Change state to GET_USER_INPUT, set msg role as 'sys' */
+          if (pStateVars->state == GET_USER_INPUT) {
+
+            // Only change state if user has typed text
+            if (pStateVars->inputIdx != 0) {
+              pStateVars->msgPtr->role = user;
+              pStateVars->msgCount++;
+              pStateVars->inputIdx = 0;  // Reset Input Index for next response
+              pStateVars->state = GET_RESPONSE;
+            } else {
+              /* User pressed enter with no text entered, this can happen easily if a user presses 
+              Enter/Return after the response is shown, thinking they need to clear the display with enter. */
+              u8g2.clearDisplay();
+            }
+
+            Serial.println("  | User message submitted");
+
+            // User is updating system message
+          } else if (pStateVars->state == UPDATE_SYS_MSG) {
+
+            pStateVars->msgPtr->role = sys;  // New system message has been added, update the message role
+            displayMsg((char*)SystemMsgUpdateSuccessAlert, ALERT_MSG_LENGTH);
+
+            pStateVars->state = GET_USER_INPUT;
+            pStateVars->bufferChange = false;  // Do not update display
+            Serial.println(systemMessage.content);
+            Serial.println("  | System message updated.");
+          }
+
+          // Any time enter is pressed, clear the current input for the next message
+          pStateVars->clearInput = true;
+
+          Serial.print("    | state-> ");
+          Serial.println(pStateVars->state);
+          break;
+
+        case PS2_KEY_DELETE:
+        case PS2_KEY_BS:
+
+          pStateVars->inputIdx = pStateVars->inputIdx > 0 ? pStateVars->inputIdx - 1 : 0;
+          pStateVars->msgPtr->content[pStateVars->inputIdx] = ' ';
+
+          Serial.println("KeyPressed-> Backspace/Delete ");
+          Serial.print("  | Input Index->");
+          Serial.println(pStateVars->inputIdx);
+          break;
+
+        case PS2_KEY_TAB:
+        case PS2_KEY_SPACE:
+
+          if (pStateVars->inputIdx < MAX_MESSAGE_LENGTH - 1) {
+            pStateVars->msgPtr->content[pStateVars->inputIdx] = ' ';
+            pStateVars->inputIdx++;
+          }
+
+          Serial.println("KeyPressed-> Space/Tab");
+          Serial.print("  | Input Index->");
+          Serial.println(pStateVars->inputIdx);
+          break;
+
+        /* The Escape key changes allows the user to enter a new system message. */
+        case PS2_KEY_ESC:
+          displayMsg((char*)SystemMsgUpdateInitiateAlert, ALERT_MSG_LENGTH);
+          pStateVars->state = UPDATE_SYS_MSG;
+          pStateVars->inputIdx = 0;
+          pStateVars->bufferChange = false;  // Do not update display
+
+          Serial.println("KeyPressed-> Esc");
+          Serial.print("  | state-> ");
+          Serial.println(pStateVars->state);
+          break;
+
+        /* Up and down arrow keys are used when the user is reviewing a long response. */
+        case PS2_KEY_UP_ARROW:
+
+          if (pStateVars->inputIdx == 0) {        // Ensure user is not typing a new message (maybe they pressed arrow key by accident)
+            pStateVars->displayOffset--;          // Move the display index back one line
+            pStateVars->state = REVIEW_RESPONSE;  // Make sure the change is displayed on the screen
+          }
+
+          Serial.println("KeyPressed-> Up Arrow");
+          Serial.print("  | displayOffset->");
+          Serial.println(pStateVars->displayOffset);
+          break;
+
+        case PS2_KEY_DN_ARROW:
+
+          if (pStateVars->inputIdx == 0) {  // Ensure user is not typing a new message (maybe they pressed arrow key by accident)
+            pStateVars->displayOffset++;    // Move the display index forward one line
+
+            if (pStateVars->displayOffset > 0) {  // displayOffset of 0 represents the bottom of the message,
+              pStateVars->displayOffset = 0;      // so you can't move below that.
+            }
+
+            pStateVars->state = REVIEW_RESPONSE;  // Make sure the change is displayed on the screen
+          }
+
+          Serial.println("KeyPressed-> Down Arrow");
+          Serial.print("  | displayOffset->");
+          Serial.println(pStateVars->displayOffset);
+          break;
+
+        default:
+
+          if (pStateVars->clearInput) {
+
+            /* Clear all the previous data in the message content pointed to by msgPtr. */
+            memset(pStateVars->msgPtr->content, 0, MAX_MESSAGE_LENGTH);
+
+            pStateVars->inputIdx = 0;        // Return index to 0 for new message
+            pStateVars->clearInput = false;  // Reset flag
+
+            Serial.println("  | Message cleared.");
+          }
+
+          // Assign incoming char to a message if there is still room
+          if (pStateVars->inputIdx < MAX_MESSAGE_LENGTH - 1) {
+
+            pStateVars->msgPtr->content[pStateVars->inputIdx] = char(remappedKey);
+            pStateVars->inputIdx++;
+
+            Serial.print(char(remappedKey));
+
+            /* If you have come to the end of the msg content, 
+            add a visual indicator to let the user know. */
+          } else if (pStateVars->inputIdx == MAX_MESSAGE_LENGTH - 1) {
+            pStateVars->msgPtr->content[pStateVars->inputIdx] = '<';
+            pStateVars->inputIdx++;
+
+            Serial.print("  | You've Reached the end of Input Index->");
+            Serial.println(pStateVars->inputIdx);
+          }
+      }  // Close switch-case
+    }    // Close if Command/printable key
+  }      // Close if keyboard input available
+}  // Close getUserInput
+
 /*************************************************************************/
 /*******   SETUP    ******************************************************/
 /*************************************************************************/
@@ -783,43 +974,7 @@ void setup(void) {
 
 void loop(void) {
 
-  // The state will determine the flow of the program
-  static states state = GET_USER_INPUT;
-
-  /*  This will count the total number of messages between the user and the agent.
-  This does not include the system message. We will use this message count 
-  to determine our index inside the messages array. */
-  static int msgCount = 0;
-
-  /* The msgPtr is used for assigning keyboard input text to either:
-    -> the System Message or,
-    -> a User Message in the messages array
-  It is assigned based on the current state.
-  The msgPtr is also used for displaying the user keyboard input text. */
-  struct message* msgPtr = (state == GET_USER_INPUT)
-                             ? &messages[msgCount % MAX_MESSAGES]  // This implements the circular nature of the messages array
-                             : &systemMessage;
-
-  /****** User Input Control *******/
-
-  /* Every time a user types a character, we increment inputIdx. 
-  If user presses backspace, we decrement inputIdx. */
-  static int inputIdx = 0;
-
-  // A flag to clear the display buffer and reset inputIdx to 0
-  static bool clearInput = false;
-
-  /* A flag to used to ensure user input is displayed only when the 
-  display buffer has been meaningfully changed */
-  bool bufferChange = false;
-
-  /******* Response Display Control *******/
-
-  /* When a user presses up and down arrows, this adjusts the index  
-   of the message content to show */
-  static int displayOffset = 0;
-
-  static StateVariables stateVars = {
+  static StateVars stateVars = {
     GET_USER_INPUT,  // state
     0,               // msgCount
     0,               // inputIndex
@@ -827,182 +982,14 @@ void loop(void) {
     0                // displayOffset
   };
 
-  stateVars.msgPtr = (state == GET_USER_INPUT)
-                       ? &messages[msgCount % MAX_MESSAGES]  // This implements the circular nature of the messages array
+  stateVars.msgPtr = (stateVars.state == GET_USER_INPUT)
+                       ? &messages[stateVars.msgCount % MAX_MESSAGES]  // This implements the circular nature of the messages array
                        : &systemMessage;
 
   stateVars.bufferChange = false;
 
-  /***************************************************************************/
-  /*********** GET USER INPUT ************************************************/
-  /***************************************************************************/
-  // If the user has pressed a key during an input/update state
-  if (keyboard.available() && (stateVars.state == GET_USER_INPUT || stateVars.state == UPDATE_SYS_MSG)) {
-
-    /* This is a 16 bit value, the 8 MSB are individual flags for functional keys (like shift, control, etc)
-    While the 8 LSB make up a unique code for the specific key that was pressed. */
-    int key = keyboard.read();
-    byte base = key & 0xff;                   // This is the 8 bit unique code for a character
-    byte remappedKey = keymap.remapKey(key);  // remapKey returns a 0 if the key is not standard ASCII/UTF-8 code.
-                                              // This is used to filter out non-display character keys, like Fn, Alt, etc
-
-    // Check if up or down arrow pressed
-    boolean arrowKeyPressed = (base == PS2_KEY_UP_ARROW) || (base == PS2_KEY_DN_ARROW);
-
-    // Printable and Select Command Keys
-    if (remappedKey > 0 || arrowKeyPressed) {
-
-      // Signals the downstream print function to re-display buffer
-      stateVars.bufferChange = true;
-
-      switch (base) {
-
-        case PS2_KEY_ENTER:
-
-          //keypressEnter(&state, &inputIdx, &msgPtr, &msgCount, &bufferChange, &clearInput);
-
-          Serial.println("KeyPressed-> Enter");
-
-          /* Pressing the Enter/Return key has different effects depending on the state and whether 
-          the user has input any text yet or not.
-
-          state          |  Major Action
-          GET_USER_INPUT |  Change state to GET_RESPONSE, set msg role as 'user'
-          UPDATE_SYS_MSG |  Change state to GET_USER_INPUT, set msg role as 'sys' */
-          if (stateVars.state == GET_USER_INPUT) {
-
-            // Only change state if user has typed text
-            if (stateVars.inputIdx != 0) {
-              stateVars.msgPtr->role = user;
-              stateVars.msgCount++;
-              stateVars.inputIdx = 0;  // Reset Input Index for next response
-              stateVars.state = GET_RESPONSE;
-            } else {
-              /* User pressed enter with no text entered, this can happen easily if a user presses 
-              Enter/Return after the response is shown, thinking they need to clear the display with enter. */
-              u8g2.clearDisplay();
-            }
-
-            Serial.println("  | User message submitted");
-
-            // User is updating system message
-          } else if (stateVars.state == UPDATE_SYS_MSG) {
-
-            stateVars.msgPtr->role = sys;  // New system message has been added, update the message role
-            displayMsg((char*)SystemMsgUpdateSuccessAlert, ALERT_MSG_LENGTH);
-
-            stateVars.state = GET_USER_INPUT;
-            stateVars.bufferChange = false;  // Do not update display
-
-            Serial.println("  | System message updated.");
-          }
-
-          // Any time enter is pressed, clear the current input for the next message
-          stateVars.clearInput = true;
-
-          Serial.print("    | state-> ");
-          Serial.println(stateVars.state);
-          break;
-
-        case PS2_KEY_DELETE:
-        case PS2_KEY_BS:
-
-          stateVars.inputIdx = stateVars.inputIdx > 0 ? stateVars.inputIdx - 1 : 0;
-          stateVars.msgPtr->content[stateVars.inputIdx] = ' ';
-
-          Serial.println("KeyPressed-> Backspace/Delete ");
-          Serial.print("  | Input Index->");
-          Serial.println(stateVars.inputIdx);
-          break;
-
-        case PS2_KEY_TAB:
-        case PS2_KEY_SPACE:
-
-          if (stateVars.inputIdx < MAX_MESSAGE_LENGTH - 1) {
-            stateVars.msgPtr->content[stateVars.inputIdx] = ' ';
-            stateVars.inputIdx++;
-          }
-
-          Serial.println("KeyPressed-> Space/Tab");
-          Serial.print("  | Input Index->");
-          Serial.println(stateVars.inputIdx);
-          break;
-
-        /* The Escape key changes allows the user to enter a new system message. */
-        case PS2_KEY_ESC:
-          displayMsg((char*)SystemMsgUpdateInitiateAlert, ALERT_MSG_LENGTH);
-          stateVars.state = UPDATE_SYS_MSG;
-          stateVars.inputIdx = 0;
-          stateVars.bufferChange = false;  // Do not update display
-
-          Serial.println("KeyPressed-> Esc");
-          Serial.print("  | state-> ");
-          Serial.println(stateVars.state);
-          break;
-
-        /* Up and down arrow keys are used when the user is reviewing a long response. */
-        case PS2_KEY_UP_ARROW:
-
-          if (stateVars.inputIdx == 0) {        // Ensure user is not typing a new message (maybe they pressed arrow key by accident)
-            stateVars.displayOffset--;          // Move the display index back one line
-            stateVars.state = REVIEW_RESPONSE;  // Make sure the change is displayed on the screen
-          }
-
-          Serial.println("KeyPressed-> Up Arrow");
-          Serial.print("  | displayOffset->");
-          Serial.println(stateVars.displayOffset);
-          break;
-
-        case PS2_KEY_DN_ARROW:
-
-          if (stateVars.inputIdx == 0) {  // Ensure user is not typing a new message (maybe they pressed arrow key by accident)
-            stateVars.displayOffset++;    // Move the display index forward one line
-
-            if (stateVars.displayOffset > 0) {  // displayOffset of 0 represents the bottom of the message,
-              stateVars.displayOffset = 0;      // so you can't move below that.
-            }
-
-            stateVars.state = REVIEW_RESPONSE;  // Make sure the change is displayed on the screen
-          }
-
-          Serial.println("KeyPressed-> Down Arrow");
-          Serial.print("  | displayOffset->");
-          Serial.println(displayOffset);
-          break;
-
-        default:
-
-          if (stateVars.clearInput) {
-
-            /* Clear all the previous data in the message content pointed to by msgPtr. */
-            memset(stateVars.msgPtr->content, 0, MAX_MESSAGE_LENGTH);
-
-            stateVars.inputIdx = 0;        // Return index to 0 for new message
-            stateVars.clearInput = false;  // Reset flag
-
-            Serial.println("  | Message cleared.");
-          }
-
-          // Assign incoming char to a message if there is still room
-          if (stateVars.inputIdx < MAX_MESSAGE_LENGTH - 1) {
-
-            stateVars.msgPtr->content[stateVars.inputIdx] = char(remappedKey);
-            stateVars.inputIdx++;
-
-            Serial.print(char(remappedKey));
-
-            /* If you have come to the end of the msg content, 
-            add a visual indicator to let the user know. */
-          } else if (stateVars.inputIdx == MAX_MESSAGE_LENGTH - 1) {
-            stateVars.msgPtr->content[stateVars.inputIdx] = '<';
-            stateVars.inputIdx++;
-
-            Serial.print("  | You've Reached the end of Input Index->");
-            Serial.println(stateVars.inputIdx);
-          }
-      }  // Close switch-case
-    }    // Close if Command/printable key
-  }      // Close if keyboard input available
+  /*********** GET USER INPUT *************************************************/
+  getUserInput(&stateVars);
 
   /*********** GET RESPONSE FROM OPEN_AI ***************************************/
   getResponse(&stateVars.state, &stateVars.msgCount);
@@ -1015,185 +1002,4 @@ void loop(void) {
   /*********** DISPLAY AGENT RESPONSE ******************************************/
   displayResponse(&stateVars.state, &stateVars.displayOffset, &stateVars.msgCount);
 
-  
-#ifdef REFACTOR
-  // If the user has pressed a key during an input/update state
-  if (keyboard.available() && (state == GET_USER_INPUT || state == UPDATE_SYS_MSG)) {
-
-    /* This is a 16 bit value, the 8 MSB are individual flags for functional keys (like shift, control, etc)
-    While the 8 LSB make up a unique code for the specific key that was pressed. */
-    int key = keyboard.read();
-    byte base = key & 0xff;                   // This is the 8 bit unique code for a character
-    byte remappedKey = keymap.remapKey(key);  // remapKey returns a 0 if the key is not standard ASCII/UTF-8 code.
-                                              // This is used to filter out non-display character keys, like Fn, Alt, etc
-
-    // Check if up or down arrow pressed
-    boolean arrowKeyPressed = (base == PS2_KEY_UP_ARROW) || (base == PS2_KEY_DN_ARROW);
-
-    // Printable and Select Command Keys
-    if (remappedKey > 0 || arrowKeyPressed) {
-
-      // Signals the downstream print function to re-display buffer
-      bufferChange = true;
-
-      switch (base) {
-
-        case PS2_KEY_ENTER:
-
-          //keypressEnter(&state, &inputIdx, &msgPtr, &msgCount, &bufferChange, &clearInput);
-
-          Serial.println("KeyPressed-> Enter");
-
-          /* Pressing the Enter/Return key has different effects depending on the state and whether 
-          the user has input any text yet or not.
-
-          state          |  Major Action
-          GET_USER_INPUT |  Change state to GET_RESPONSE, set msg role as 'user'
-          UPDATE_SYS_MSG |  Change state to GET_USER_INPUT, set msg role as 'sys' */
-          if (state == GET_USER_INPUT) {
-
-            // Only change state if user has typed text
-            if (inputIdx != 0) {
-              msgPtr->role = user;
-              msgCount++;
-              inputIdx = 0;  // Reset Input Index for next response
-              state = GET_RESPONSE;
-            } else {
-              /* User pressed enter with no text entered, this can happen easily if a user presses 
-              Enter/Return after the response is shown, thinking they need to clear the display with enter. */
-              u8g2.clearDisplay();
-            }
-
-            Serial.println("  | User message submitted");
-
-            // User is updating system message
-          } else if (state == UPDATE_SYS_MSG) {
-
-            msgPtr->role = sys;  // New system message has been added, update the message role
-            displayMsg((char*)SystemMsgUpdateSuccessAlert, ALERT_MSG_LENGTH);
-
-            state = GET_USER_INPUT;
-            bufferChange = false;  // Do not update display
-
-            Serial.println("  | System message updated.");
-          }
-
-          // Any time enter is pressed, clear the current input for the next message
-          clearInput = true;
-
-          Serial.print("    | state-> ");
-          Serial.println(state);
-          break;
-
-        case PS2_KEY_DELETE:
-        case PS2_KEY_BS:
-
-          inputIdx = inputIdx > 0 ? inputIdx - 1 : 0;
-          msgPtr->content[inputIdx] = ' ';
-
-          Serial.println("KeyPressed-> Backspace/Delete ");
-          Serial.print("  | Input Index->");
-          Serial.println(inputIdx);
-          break;
-
-        case PS2_KEY_TAB:
-        case PS2_KEY_SPACE:
-
-          if (inputIdx < MAX_MESSAGE_LENGTH - 1) {
-            msgPtr->content[inputIdx] = ' ';
-            inputIdx++;
-          }
-
-          Serial.println("KeyPressed-> Space/Tab");
-          Serial.print("  | Input Index->");
-          Serial.println(inputIdx);
-          break;
-
-        /* The Escape key changes allows the user to enter a new system message. */
-        case PS2_KEY_ESC:
-          displayMsg((char*)SystemMsgUpdateInitiateAlert, ALERT_MSG_LENGTH);
-          state = UPDATE_SYS_MSG;
-          inputIdx = 0;
-          bufferChange = false;  // Do not update display
-
-          Serial.println("KeyPressed-> Esc");
-          Serial.print("  | state-> ");
-          Serial.println(state);
-          break;
-
-        /* Up and down arrow keys are used when the user is reviewing a long response. */
-        case PS2_KEY_UP_ARROW:
-
-          if (inputIdx == 0) {        // Ensure user is not typing a new message (maybe they pressed arrow key by accident)
-            displayOffset--;          // Move the display index back one line
-            state = REVIEW_RESPONSE;  // Make sure the change is displayed on the screen
-          }
-
-          Serial.println("KeyPressed-> Up Arrow");
-          Serial.print("  | displayOffset->");
-          Serial.println(displayOffset);
-          break;
-
-        case PS2_KEY_DN_ARROW:
-
-          if (inputIdx == 0) {  // Ensure user is not typing a new message (maybe they pressed arrow key by accident)
-            displayOffset++;    // Move the display index forward one line
-
-            if (displayOffset > 0) {  // displayOffset of 0 represents the bottom of the message,
-              displayOffset = 0;      // so you can't move below that.
-            }
-
-            state = REVIEW_RESPONSE;  // Make sure the change is displayed on the screen
-          }
-
-          Serial.println("KeyPressed-> Down Arrow");
-          Serial.print("  | displayOffset->");
-          Serial.println(displayOffset);
-          break;
-
-        default:
-
-          if (clearInput) {
-
-            /* Clear all the previous data in the message content pointed to by msgPtr. */
-            memset(msgPtr->content, 0, MAX_MESSAGE_LENGTH);
-
-            inputIdx = 0;        // Return index to 0 for new message
-            clearInput = false;  // Reset flag
-
-            Serial.println("  | Message cleared.");
-          }
-
-          // Assign incoming char to a message if there is still room
-          if (inputIdx < MAX_MESSAGE_LENGTH - 1) {
-
-            msgPtr->content[inputIdx] = char(remappedKey);
-            inputIdx++;
-
-            Serial.print(char(remappedKey));
-
-            /* If you have come to the end of the msg content, 
-            add a visual indicator to let the user know. */
-          } else if (inputIdx == MAX_MESSAGE_LENGTH - 1) {
-            msgPtr->content[inputIdx] = '<';
-            inputIdx++;
-
-            Serial.print("  | You've Reached the end of Input Index->");
-            Serial.println(inputIdx);
-          }
-      }  // Close switch-case
-    }    // Close if Command/printable key
-  }      // Close if keyboard input available
-
-  /*********** GET RESPONSE FROM OPEN_AI ***************************************/
-  getResponse(&state, &msgCount);
-
-  /*********** DISPLAY USER KEYBOARD INPUT AS IT IS TYPED **********************/
-  if (bufferChange && (state == GET_USER_INPUT || state == UPDATE_SYS_MSG)) {
-    displayMsg(msgPtr->content, inputIdx);
-  }
-
-  /*********** DISPLAY AGENT RESPONSE ******************************************/
-  displayResponse(&state, &displayOffset, &msgCount);
-#endif
 }  // close void loop
