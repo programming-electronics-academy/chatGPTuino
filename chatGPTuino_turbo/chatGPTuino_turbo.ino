@@ -131,7 +131,7 @@ struct StateVars {
     -> a User Message in the messages array
   It is assigned based on the current state.
   The msgPtr is also used for displaying the user keyboard input text. */
-  struct message* msgPtr;
+  struct Message* msgPtr;
 };
 
 /*************** Roles **************
@@ -217,7 +217,7 @@ play around with sizing.*/
 
   The messages array is updated by every state, and is used extensively throughout the program.
 */
-struct message {
+struct Message {
   enum roles role;
   char content[MAX_MESSAGE_LENGTH];
 } messages[MAX_MESSAGES];
@@ -227,10 +227,10 @@ struct message {
   In the current configuation, the system message is NOT stored in the messages array, but rather inserted
   into the JSON packet during the API call, prior to the last message sent.
   The system message can be used for fun, and to configure the kind of response you want from the chatBot. */
-message systemMessage = { sys, "Respond as if you were a pirate." };
+Message systemMessage = { sys, "Respond as if you were a pirate." };
 
 // Used when API is not responding, prior to making another API call.
-message noConnect = { assistant, "I'm sorry, I seem to be having a brain fart, let me think on that again." };
+Message noConnect = { assistant, "I'm sorry, I seem to be having a brain fart, let me think on that again." };
 
 /* The number of characters in the assistant response.  
 This is used extensively in how the message response is displayed. */
