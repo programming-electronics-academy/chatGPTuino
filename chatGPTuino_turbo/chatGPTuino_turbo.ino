@@ -250,8 +250,7 @@ PS2KeyMap keymap;
 /*******  FUNCTIONS ******************************************************/
 /*************************************************************************/
 
-/*
- * Function:  displayMsg 
+/* Function:  displayMsg 
  * -------------------------
  * Displays contents of char array to OLED with text wrapping.
  * If text exceeds text exceeds the number of lines, it scrolls
@@ -331,9 +330,7 @@ void displayMsg(char msg[], int endIdx, int startIdx = 0, bool setDelay = false)
   u8g2.sendBuffer();
 }
 
-
-/*
- * Function:  displayFace
+/* Function:  displayFace
  * -------------------------
  * Displays 3 faces repeatly and randomly, as well as a message on screen.  
  * Very amateur animation for blinking and mouth movement.
@@ -376,19 +373,18 @@ void displayFace(long displayTime, const char displayMessage[], long delayInterv
   }
 }
 
-/*
- * Function:  displayResponse
+/* Function:  displayResponse
  * -------------------------
  * Displays the reponse from openAPI to the OLED.
  * 
- * struct StateVars * pStateVars:  struct of state variables, the members used are:
+ * struct StateVars * pStateVars:  struct of state variables, the members used include...
  *        states* state: current state
  *        int* displayOffset: used for adjusting which line of text to display first
  *        int* msgCount: current number of messages in message array
  * 
  * returns: void
-*/
-void displayResponse(struct StateVars * pStateVars) {
+ */
+void displayResponse(struct StateVars* pStateVars) {
 
   if (pStateVars->state == DISPLAY_RESPONSE || pStateVars->state == REVIEW_RESPONSE) {
 
@@ -397,7 +393,7 @@ void displayResponse(struct StateVars * pStateVars) {
     /*  Determine the most recent message index - recall, the most recent message IS NOT always
     the latest element in the messages[] array. */
     int responseIdx = (pStateVars->msgCount % MAX_MESSAGES) - 1 < 0  // Check if you've reached the last index
-                        ? MAX_MESSAGES - 1                 // If so, we'll want to print the last index
+                        ? MAX_MESSAGES - 1                           // If so, we'll want to print the last index
                         : pStateVars->msgCount % MAX_MESSAGES - 1;   // Otherwise, circle back
 
     /* Calculate the start and end display indices for the response and for  "response scrubbing" 
@@ -442,7 +438,7 @@ void displayResponse(struct StateVars * pStateVars) {
       if (startIdx < 0) {
         startIdx = 0;
         (pStateVars->displayOffset)++;  // Negates an up arrow press in case user keeps pressing up arrow when already
-                              // at the beginning of a message so displayOffset will not accumulate presses
+                                        // at the beginning of a message so displayOffset will not accumulate presses
       }
 
       endIdx = startIdx + MAX_CHARS_ON_SCREEN - 1;
@@ -454,8 +450,7 @@ void displayResponse(struct StateVars * pStateVars) {
   }
 }
 
-/*
- * Function:  printToConsoleMessageArray
+/* Function:  printToConsoleMessageArray
  * -------------------------
  * Prints all contents of the messages array to the console,
  * as well as the length of characters of the most recent reponse.
@@ -478,9 +473,7 @@ void printToConsoleMessageArray() {
   Serial.println("    |----------------------------------------------------");
 }
 
-
-/*
- * Function:  generateJSONRequestBody
+/* Function:  generateJSONRequestBody
  * -------------------------
  * Creates a JSON formatted object of all the messages 
  * in the messages array.  It all inserts the system message into 
@@ -552,8 +545,7 @@ DynamicJsonDocument generateJsonRequestBody(int numMessages) {
   return doc;
 }
 
-/*
- * Function:  postRequest
+/* Function:  postRequest
  * -------------------------
  * Makes a POST request to OpenAI 
  *
@@ -585,8 +577,7 @@ void postRequest(DynamicJsonDocument* pJsonRequestBody, WiFiClientSecure* pClien
   Serial.println("    | JSON sent");
 }
 
-/*
- * Function:  putResponseInMsgArray
+/* Function:  putResponseInMsgArray
  * -------------------------
  * Applies filter to JSON reponse and saves response to messages array. 
  *
@@ -632,8 +623,7 @@ bool putResponseInMsgArray(WiFiClientSecure* pClient, int numMessages) {
   return 1;
 }
 
-/*
- * Function:  waitForServerResponse
+/* Function:  waitForServerResponse
  * -------------------------
  * Holds program in loop while waiting for response from server.
  * Times out after defined interval.  Displays waiting face to OLED. 
@@ -662,32 +652,31 @@ bool waitForServerResponse(WiFiClientSecure* pClient) {
   return responseSuccess;
 }
 
-
-/*
- * Function:  getResponse
+/* Function:  getResponse
  * -------------------------
  * Form JSON request body and send HTTPS request to openAI.
  * Parse the reponse. Update messages array with new response.
  *  
- * states* pState: current state
- * int* pMsgCount: current number of messages in message array
+ * struct StateVars * pStateVars: struct of state variables, members used include:
+ *        states* pState: current state
+ *        int* pMsgCount: current number of messages in message array
  *
  * returns: void
  */
-void getResponse(States* pState, int* pMsgCount) {
+void getResponse(struct StateVars* pStateVars) {
 
-  if (*pState == GET_RESPONSE) {
+  if (pStateVars->state == GET_RESPONSE) {
 
     Serial.println("|- Start API Call -------------------------------|");
     Serial.print("    | msgCount->");
-    Serial.println(*pMsgCount);
+    Serial.println(pStateVars->msgCount);
 
     // Create a secure wifi client
     WiFiClientSecure client;
     client.setCACert(rootCACertificate);
 
     // Generate JSON Request body from messages array
-    DynamicJsonDocument jsonRequestBody = generateJsonRequestBody(*pMsgCount);
+    DynamicJsonDocument jsonRequestBody = generateJsonRequestBody(pStateVars->msgCount);
 
     // Connect to OpenAI
     int conn = client.connect(server, PORT);
@@ -713,12 +702,12 @@ void getResponse(States* pState, int* pMsgCount) {
       // If you receive a response, parse the JSON and copy the response to messages[]
       if (responseSuccess) {
 
-        bool responseSaved = putResponseInMsgArray(&client, *pMsgCount);
+        bool responseSaved = putResponseInMsgArray(&client, pStateVars->msgCount);
 
         if (responseSaved) {
 
-          (*pMsgCount)++;              // We successfully received and saved a new message
-          *pState = DISPLAY_RESPONSE;  // Now display response
+          (pStateVars->msgCount)++;              // We successfully received and saved a new message
+          pStateVars->state = DISPLAY_RESPONSE;  // Now display response
 
         } else {
           // An error occured durring parsing, exit and try again (error message handled in parsing function)
@@ -744,10 +733,9 @@ void getResponse(States* pState, int* pMsgCount) {
     // Disconnect from server after response received, server timeout, or connection failure
     client.stop();
   }
-}
+}  // Close getResponse
 
-/*
- * Function:  getUserInput
+/* Function:  getUserInput
  * -------------------------
  * Parse keyboard input into Command Keys (i.e. Shift, Backspace, etc) and Text
  *    If Command Keys, execute appropriate command  
@@ -928,10 +916,24 @@ void getUserInput(struct StateVars* pStateVars) {
   }      // Close if keyboard input available
 }  // Close getUserInput
 
+/* Function:  displayKeyboardInput
+ * -------------------------
+ * Display keyboard input as it is typed as new display text comes in
+ *  
+ * struct StateVars* pStateVars: state variables used for managing input and display
+ *
+ * returns: void
+ */
+void displayKeyboardInput(struct StateVars* pStateVars) {
+
+  if (pStateVars->bufferChange && (pStateVars->state == GET_USER_INPUT || pStateVars->state == UPDATE_SYS_MSG)) {
+    displayMsg(pStateVars->msgPtr->content, pStateVars->inputIdx);
+  }
+}
+
 /*************************************************************************/
 /*******   SETUP    ******************************************************/
 /*************************************************************************/
-
 void setup(void) {
 
   Serial.begin(9600);
@@ -971,37 +973,35 @@ void setup(void) {
 /*************************************************************************/
 /*******  LOOP      ******************************************************/
 /*************************************************************************/
-
 void loop(void) {
 
-  // this 
+  // Keep track of the state variables (see definition above for more details of each member)
   static StateVars stateVars = {
-    GET_USER_INPUT,  // state
-    0,               // msgCount
-    0,               // inputIndex
-    false,           // clearInput
-    0                // displayOffset
+    GET_USER_INPUT,  // state - the current state
+    0,               // msgCount - total number of messages
+    0,               // inputIndex - where is the cursor
+    false,           // clearInput - flag to clear msgPointer contents and reset inputIndex
+    0                // displayOffset - adjusts index of response shown on display when using up and down arrows
   };
 
+  /* When a user types text, it will be recorded in either the message array, or the systemMessage.
+  Every time through the loop, check the state, and point msgPtr appropriately */
   stateVars.msgPtr = (stateVars.state == GET_USER_INPUT)
                        ? &messages[stateVars.msgCount % MAX_MESSAGES]  // This implements the circular nature of the messages array
                        : &systemMessage;
 
-  stateVars.bufferChange = false;
+  stateVars.bufferChange = false;  // Blocks text from being re-displayed if there is nothing new to show
 
   /*********** GET USER INPUT *************************************************/
   getUserInput(&stateVars);
 
   /*********** GET RESPONSE FROM OPEN_AI ***************************************/
-  getResponse(&stateVars.state, &stateVars.msgCount);
+  getResponse(&stateVars);
 
   /*********** DISPLAY USER KEYBOARD INPUT AS IT IS TYPED **********************/
-  if (stateVars.bufferChange && (stateVars.state == GET_USER_INPUT || stateVars.state == UPDATE_SYS_MSG)) {
-    displayMsg(stateVars.msgPtr->content, stateVars.inputIdx);
-  }
+  displayKeyboardInput(&stateVars);
 
   /*********** DISPLAY AGENT RESPONSE ******************************************/
-  // displayResponse(&stateVars.state, &stateVars.displayOffset, &stateVars.msgCount);
   displayResponse(&stateVars);
 
 }  // close void loop
