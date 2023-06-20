@@ -26,7 +26,6 @@ const char* server = "api.openai.com";
 #define PORT 443                               // The port you'll connect to on the server - this is standard.
 #define SERVER_RESPONSE_WAIT_TIME (15 * 1000)  // How long to wait for a server response (seconds * 1000)
 
-
 // OpenAI API endpoint root certificate used to ensure response is actually from OpenAPI
 const char* rootCACertificate =
   "-----BEGIN CERTIFICATE-----\n"
@@ -135,7 +134,6 @@ struct StateVars {
   struct message* msgPtr;
 };
 
-
 /*************** Roles **************
   The current chatGTP API format has 3 distinct role types for each message.
 
@@ -149,7 +147,6 @@ enum roles { sys,  //system
              assistant };
 
 const char roleNames[3][10] = { "system", "user", "assistant" };
-
 
 /****** Tokens *******
   A token in the OpenAI API is roughly equivalent to 3/4 of a word.  Tokens are extremely important, because they are used to measure billing.
