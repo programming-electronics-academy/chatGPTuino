@@ -236,8 +236,18 @@ Message noConnect = { assistant, "I'm sorry, I seem to be having a brain fart, l
 This is used extensively in how the message response is displayed. */
 unsigned int responseLength;
 
-// OLED Display
-U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* clock=*/SCL, /* data=*/SDA, /* reset=*/U8X8_PIN_NONE);  // High speed I2C
+/* Monochrome OLED Display - pick a constructor that works for your screen.
+    The code has been optimized for screens of size 128 x 64 px.
+    https://github.com/olikraus/u8g2/wiki/u8g2setupcpp */
+
+// Small screen - 0.96", 128 x 64 px, SSD1306 using I2C
+// U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* clock=*/SCL, /* data=*/SDA, /* reset=*/U8X8_PIN_NONE);  // High speed I2C
+
+// Not as small screen, 1.3", 128 x 64 px, SSD1106 using I2C
+// U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
+
+// Larger Screen, 2.42", 128 x 64 px, SSD1309 using SPI
+U8G2_SSD1309_128X64_NONAME0_F_4W_SW_SPI u8g2(U8G2_R0, /* clock=*/SCK, /* data=*/SDO, /* cs=*/38, /* dc=*/33, /* reset=*/U8X8_PIN_NONE);
 
 /*************** Keyboard Input ****************/
 PS2KeyAdvanced keyboard;
@@ -958,6 +968,7 @@ void setup(void) {
 
   // Display Setup
   u8g2.begin();
+  // This Font size is optimized for 128 x 64 px screen sizes.
   u8g2.setFont(u8g2_font_6x13_tf);  //https://github.com/olikraus/u8g2/wiki/fntlist12
 
   // Show a face and message, and then instructions.
