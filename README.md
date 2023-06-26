@@ -13,6 +13,8 @@ What we are doing here is pulling the power of AI out of the cloud and figuring 
 
 __Hardware is eating AI, and you’re the chef.__
 
+![chatGPT Terminal on desk](https://www.programmingelectronics.com/wp-content/uploads/2023/06/chatGPT-Terminal-2-1024x768.jpg)
+
 ## chatGPT Terminal operation in a nutshell
 Here is a quick outline of this simple chatGPT Terminal.
 
@@ -36,9 +38,10 @@ There are 3 major components you’ll need for this project:
 For this project we’ll use the FeatherS2 - ESP32-S2 by Unexpected Maker as the brains of the project.  The ESP32 is a WiFi (and bluetooth) enabled microcontroller, and they have tons of great development boards for them.
 
 You definitely don’t need this exact model, any ESP32 (or ESP8266) would probably work just fine.  
-PS/2 Keyboard
 
-### You’ll also need a PS/2 style keyboard - these are old school keyboards that have what is not a very outdated connector type.  The reason I went with this style keyboard is because the software to read the incoming keypresses is simple to implement and available in multiple different Arduino libraries.
+### PS/2 Keyboard
+
+You’ll also need a PS/2 style keyboard - these are old school keyboards that have what is not a very outdated connector type.  The reason I went with this style keyboard is because the software to read the incoming keypresses is simple to implement and available in multiple different Arduino libraries.
 
 ### OLED
 
@@ -49,12 +52,12 @@ You can use different display sizes as long as the pixel ratio stays the same, o
 ## The Connections
 
 This wiring diagram lays out the connections you’ll need between the major components of your chatGPT terminal.  This shows using an I2C OLED display, you’ll need to change up the connections for using SPI. 
-https://www.programmingelectronics.com/wp-content/uploads/2023/06/image7.png
+![chatGPT Terminal Wiring Diagram](https://www.programmingelectronics.com/wp-content/uploads/2023/06/image7.png)
 
 
 ## chatGPT terminal Code
 The code flow for this system is not too complicated.
-https://www.programmingelectronics.com/wp-content/uploads/2023/06/image1.png
+![chatGPT Terminal State Diagram](https://www.programmingelectronics.com/wp-content/uploads/2023/06/image1.png)
 
 Basically, the system is always waiting for keyboard input.  If the keyboard input is part of a chat message, it saves it to a special message array.  If it’s a command key, like SHIFT, or ENTER, then it take the appropriate action.
 
