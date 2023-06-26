@@ -1,6 +1,5 @@
 /*
   More details at https://bit.ly/chatGPTuino
-  Code
 */
 #include <Arduino.h>
 #include <U8g2lib.h>  // OLED

@@ -16,10 +16,10 @@ __Hardware is eating AI, and you’re the chef.__
 ## chatGPT Terminal operation in a nutshell
 Here is a quick outline of this simple chatGPT Terminal.
 
-You type your chat on an old school keyboard
-An Arduino compatible ESP32 records your keypresses and sends a POST request to the OpenAI API
-When the response comes back, you show the text on an OLED.
-Repeat.
+1 You type your chat on an old school PS/2 keyboard
+2 An Arduino compatible ESP32 records your keypresses and sends a POST request to the OpenAI API
+3 When the response comes back, you show the text on an OLED.
+4 Repeat.
 
 Pretty straight forward!
 
