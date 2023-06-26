@@ -1,6 +1,10 @@
 #ifndef Bitmaps_h
 #define Bitmaps_h
 
+/*
+
+ */
+
 enum bitmap_names {
   eyes_open_1,
   eyes_open_2,

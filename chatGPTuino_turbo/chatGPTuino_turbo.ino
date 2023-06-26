@@ -1,3 +1,7 @@
+/*
+  More details at https://bit.ly/chatGPTuino
+  Code
+*/
 #include <Arduino.h>
 #include <U8g2lib.h>  // OLED
 
@@ -9,12 +13,11 @@
 #include <PS2KeyMap.h>       // Keyboard input mapping
 // If you want to add more special key functionality, use these key constants -> https://github.com/techpaul/PS2KeyAdvanced/blob/master/src/PS2KeyAdvanced.h
 
-#include "secrets.h"  // Network name, password, and private API key
-// #include "credentials.h"  // Network name, password, and private API key
+#include "credentials.h"  // Network name, password, and private API key
 #include "bitmaps.h"  // Images shown on screen
 
-#define DEBUG
-//#define DEBUG_SERVER_RESPONSE_BREAKING
+#define DEBUG // Prints out verbose debug info in Arduino IDE console
+//#define DEBUG_SERVER_RESPONSE_BREAKING // Breaks API calls, only uncomment when troubleshooting API response
 
 // Pins for PS/2 keyboard (through USB)
 #define DATAPIN 6  // (USB Data -)  (PS2 pin 1)
@@ -160,7 +163,7 @@ const char roleNames[3][10] = { "system", "user", "assistant" };
   https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them
   https://platform.openai.com/docs/guides/chat/introduction
   https://platform.openai.com/tokenizer */
-#define MAX_TOKENS 50      // Each token is roughly 3/4 of a word.  The longer this bigger this number, the longer the potenial response.
+#define MAX_TOKENS 200      // Each token is roughly 3/4 of a word.  The longer this bigger this number, the longer the potenial response.
 #define CHARS_PER_TOKEN 6  // Each token equates to roughly 4 chars, but does not include spaces, the number 6 was chosen to act as a safety buffer incase a response is above average length.
 #define MAX_MESSAGE_LENGTH (MAX_TOKENS * CHARS_PER_TOKEN)
 
@@ -173,7 +176,7 @@ A large value will allow for more rapport in the assistant repsonses,
 but will cost much more and take up load more memory. 
 It depends on what you're after.  10 has been a good number for me.
 When testing code not related to reponses, I recommend using a small number, like 4. */
-#define MAX_MESSAGES 4  // Min 2, Max 20
+#define MAX_MESSAGES 20  // Min 2, Max 20
 
 /* When sending message, they all go into a JSON doc.  The sizes of this doc 
 depends on the size of the previous choices. The value below is based on a 
