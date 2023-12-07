@@ -71,4 +71,4 @@ And that's pretty much a full cycle.  _Read keypresses, hit API, display respons
 
 There is also a way to inject system messages that help steer the response from chatGPT.  The default system message is “Respond like a pirate”.  To change the system message you press escape and you’ll be prompted to type a new one.
 
-For more details and a video walk through go to: https://bit.ly/chatGPTuino
+For more details go to: https://bit.ly/chatGPTuino
