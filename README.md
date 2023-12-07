@@ -1,7 +1,7 @@
 
 # chatGPTuino
 
-For more details and a video walk through go to: https://bit.ly/chatGPTuino
+For more details go to: https://bit.ly/chatGPTuino
 
 In this exploratory project you’ll interface an Arduino compatible wireless ESP32 with the OpenAI API and create a standalone “retro” chatGPT terminal using a keyboard as the input device and an OLED as the display.
 
