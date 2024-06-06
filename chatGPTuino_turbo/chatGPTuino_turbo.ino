@@ -6,6 +6,8 @@
 
 #include <WiFi.h>              // ESP32
 #include <WiFiClientSecure.h>  // ESP32
+
+// IMPORTANT: Use ArduinoJson VERSION 6.21.5 (select this version in the Library manager)
 #include <ArduinoJson.h>       // Handle JSON formatting for API calls
 
 #include <PS2KeyAdvanced.h>  // Keyboard input
