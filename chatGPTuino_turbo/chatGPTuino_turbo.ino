@@ -29,6 +29,7 @@ const char* server = "api.openai.com";
 #define SERVER_RESPONSE_WAIT_TIME (15 * 1000)  // How long to wait for a server response (seconds * 1000)
 
 // OpenAI API endpoint root certificate used to ensure response is actually from OpenAPI
+const char* rootCACertificate =
   "-----BEGIN CERTIFICATE-----\n"
   "MIIFVzCCAz+gAwIBAgINAgPlk28xsBNJiGuiFzANBgkqhkiG9w0BAQwFADBHMQsw\n"
   "CQYDVQQGEwJVUzEiMCAGA1UEChMZR29vZ2xlIFRydXN0IFNlcnZpY2VzIExMQzEU\n"
