@@ -8,17 +8,17 @@
 #include <WiFiClientSecure.h>  // ESP32
 
 // IMPORTANT: Use ArduinoJson VERSION 6.21.5 (select this version in the Library manager)
-#include <ArduinoJson.h>       // Handle JSON formatting for API calls
+#include <ArduinoJson.h>  // Handle JSON formatting for API calls
 
 #include <PS2KeyAdvanced.h>  // Keyboard input
 #include <PS2KeyMap.h>       // Keyboard input mapping
 // If you want to add more special key functionality, use these key constants -> https://github.com/techpaul/PS2KeyAdvanced/blob/master/src/PS2KeyAdvanced.h
 
 #include "credentials.h"  // Network name, password, and private API key
-#include "bitmaps.h"  // Images shown on screen
+#include "bitmaps.h"      // Images shown on screen
 
-#define DEBUG // Prints out verbose debug info in Arduino IDE console
-//#define DEBUG_SERVER_RESPONSE_BREAKING // Breaks API calls, only uncomment when troubleshooting API response
+#define DEBUG  // Prints out verbose debug info in Arduino IDE console
+// #define DEBUG_SERVER_RESPONSE_BREAKING // Breaks API calls, only uncomment when troubleshooting API response
 
 // Pins for PS/2 keyboard (through USB)
 #define DATAPIN 6  // (USB Data -)  (PS2 pin 1)
@@ -29,40 +29,6 @@ const char* openAPIendPoint = "https://api.openai.com/v1/chat/completions";
 const char* server = "api.openai.com";
 #define PORT 443                               // The port you'll connect to on the server - this is standard.
 #define SERVER_RESPONSE_WAIT_TIME (15 * 1000)  // How long to wait for a server response (seconds * 1000)
-
-// OpenAI API endpoint root certificate used to ensure response is actually from OpenAPI
-const char* rootCACertificate =
-  "-----BEGIN CERTIFICATE-----\n"
-  "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\n"
-  "bP6MvPJwNQzcmRk13NfIRmPVNnGuV/u3gm3c\n"
-  "-----END CERTIFICATE-----\n";
 
 /*************** Display settings ****************/
 #define SCREEN_HEIGHT 64
@@ -174,7 +140,7 @@ const char roleNames[3][10] = { "system", "user", "assistant" };
   https://help.openai.com/en/articles/4936856-what-are-tokens-and-how-to-count-them
   https://platform.openai.com/docs/guides/chat/introduction
   https://platform.openai.com/tokenizer */
-#define MAX_TOKENS 200      // Each token is roughly 3/4 of a word.  The longer this bigger this number, the longer the potenial response.
+#define MAX_TOKENS 200     // Each token is roughly 3/4 of a word.  The longer this bigger this number, the longer the potenial response.
 #define CHARS_PER_TOKEN 6  // Each token equates to roughly 4 chars, but does not include spaces, the number 6 was chosen to act as a safety buffer incase a response is above average length.
 #define MAX_MESSAGE_LENGTH (MAX_TOKENS * CHARS_PER_TOKEN)
 
